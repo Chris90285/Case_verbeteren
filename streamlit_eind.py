@@ -24,10 +24,25 @@ from streamlit_option_menu import option_menu
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
+st.markdown("""
+    <style>
+        /* Achtergrond van de hele sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #2b2b2b;
+            color: white;
+        }
 
-# ------------------- Sidebar ---------------------------
-# ------------------------------------------------------
-
+        /* Tekst en kopjes */
+        [data-testid="stSidebar"] h1, 
+        [data-testid="stSidebar"] h2, 
+        [data-testid="stSidebar"] h3, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] span {
+            color: white !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Titel bovenaan sidebar
 st.sidebar.markdown("## ⚙️ Sidebar instellingen")
@@ -58,7 +73,7 @@ if not use_new_sidebar:
     st.sidebar.write("Voor het laatst geüpdatet op:")
     st.sidebar.write(f"*{vandaag}*")
 
-# --- NIEUWE (VERBETERDE) SIDEBAR ---
+# --- NIEUWE SIDEBAR ---
 else:
     with st.sidebar:
         selected_page = option_menu(
@@ -72,15 +87,16 @@ else:
             menu_icon="compass",
             default_index=0,
             styles={
-                "container": {"padding": "5!important", "background-color": "#f8f9fa"},
-                "icon": {"color": "#0d6efd", "font-size": "20px"}, 
+                "container": {"padding": "5!important", "background-color": "#2b2b2b"},
+                "icon": {"color": "#00b4d8", "font-size": "20px"}, 
                 "nav-link": {
                     "font-size": "16px", 
                     "text-align": "left", 
                     "margin": "5px", 
-                    "--hover-color": "#e9ecef"
+                    "--hover-color": "#3a3a3a",
+                    "color": "white"
                 },
-                "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
+                "nav-link-selected": {"background-color": "#00b4d8", "color": "white"},
             }
         )
 
