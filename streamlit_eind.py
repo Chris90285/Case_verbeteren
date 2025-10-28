@@ -163,6 +163,13 @@ if not use_new_sidebar:
     st.sidebar.markdown("---")
     st.sidebar.write("Voor het laatst geüpdatet op:")
     st.sidebar.write(f"*{vandaag}*")
+    st.write('')
+    st.write('')
+    st.write('')
+    st.write('')
+    st.write('')
+    st.sidebar.markdown("---")
+    nieuwe_pagina = st.sidebar.toggle("Toon nieuwe pagina", value=False)
 
 # --- NIEUWE SIDEBAR ---
 else:
