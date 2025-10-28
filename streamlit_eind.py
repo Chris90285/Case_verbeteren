@@ -53,18 +53,22 @@ use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 # Huidige datum automatisch ophalen
 vandaag = datetime.now().strftime("%d %b %Y")
 
+# --- Paginanamen mapping ---
+# Key = naam zonder emoji (getoond in nieuwe sidebar)
+# Value = originele naam met emoji (gebruikt in code)
+page_mapping = {
+    "Laadpalen": "⚡️ Laadpalen",
+    "Voertuigen": "🚘 Voertuigen",
+    "Voorspellend model": "📊 Voorspellend model"
+}
+
 # --- OUDE SIDEBAR ---
 if not use_new_sidebar:
-    st.sidebar.markdown("## Laadpalen & Elektrische Voertuigen")
     st.sidebar.markdown("---")
 
     selected_page = st.sidebar.selectbox(
         "Selecteer een pagina",
-        [
-            "⚡️ Laadpalen",
-            "🚘 Voertuigen",
-            "📊 Voorspellend model"
-        ]
+        list(page_mapping.values())  # laat emoji zien in oude sidebar
     )
 
     st.sidebar.write("")
@@ -76,14 +80,11 @@ if not use_new_sidebar:
 # --- NIEUWE SIDEBAR ---
 else:
     with st.sidebar:
-        selected_page = option_menu(
+        clean_names = list(page_mapping.keys())  # zonder emoji
+        selected_clean_page = option_menu(
             "Navigatie", 
-            [
-                "Laadpalen",
-                "Voertuigen",
-                "Voorspellend model"
-            ],
-            icons=["zap", "car-front", "bar-chart"],
+            clean_names,
+            icons=["lightning", "car-front", "bar-chart"],  # Bootstrap icons
             menu_icon="compass",
             default_index=0,
             styles={
@@ -100,6 +101,9 @@ else:
             }
         )
 
+        # Zet de geselecteerde pagina om naar de originele naam met emoji
+        selected_page = page_mapping[selected_clean_page]
+
         st.markdown("---")
         st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
         st.markdown("---")
@@ -110,9 +114,8 @@ else:
 st.title("📊 Dashboard")
 st.caption(f"Geselecteerde pagina: **{selected_page}**")
 
-# Gebruik altijd `selected_page` verder in je code
+# --- Gebruik `selected_page` verder in je code zoals altijd ---
 page = selected_page
-
 
 # ------------------- Data inladen -----------------------
 # -------------------------------------------------------
