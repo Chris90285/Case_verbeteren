@@ -77,11 +77,11 @@ if not use_new_sidebar:
 else:
     with st.sidebar:
         selected_page = option_menu(
-            "🚀 Navigatie", 
+            "Navigatie", 
             [
-                "⚡️ Laadpalen",
-                "🚘 Voertuigen",
-                "📊 Voorspellend model"
+                "Laadpalen",
+                "Voertuigen",
+                "Voorspellend model"
             ],
             icons=["bolt", "car-front", "bar-chart"],
             menu_icon="compass",
