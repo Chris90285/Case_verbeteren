@@ -22,28 +22,57 @@ import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_option_menu import option_menu
 
-# ------------------- Sidebar ---------------------------
+# ------------------- Dark Mode Styling ----------------
 # ------------------------------------------------------
 st.markdown("""
     <style>
-        /* Achtergrond van de hele sidebar */
-        [data-testid="stSidebar"] {
-            background-color: #2b2b2b;
-            color: white;
+        /* Achtergrond en tekst van hele app */
+        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            background-color: #121212;
+            color: #E0E0E0;
         }
 
-        /* Tekst en kopjes */
+        /* Sidebar achtergrond en tekst */
+        [data-testid="stSidebar"] {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+        }
+
+        /* Sidebar kopjes en labels */
         [data-testid="stSidebar"] h1, 
         [data-testid="stSidebar"] h2, 
         [data-testid="stSidebar"] h3, 
         [data-testid="stSidebar"] p, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] span {
-            color: white !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Hoofdcontent tekst en headers */
+        [data-testid="stMarkdownContainer"] h1, 
+        [data-testid="stMarkdownContainer"] h2, 
+        [data-testid="stMarkdownContainer"] h3, 
+        [data-testid="stMarkdownContainer"] p, 
+        [data-testid="stMarkdownContainer"] label, 
+        [data-testid="stMarkdownContainer"] span {
+            color: #E0E0E0 !important;
+        }
+
+        /* Buttons, selectboxes en sliders */
+        .stButton>button, .stSelectbox>div>div>div, .stSlider>div>div>div {
+            background-color: #333 !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Hyperlinks */
+        a {
+            color: #1E90FF !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
+# ------------------- Sidebar ---------------------------
+# ------------------------------------------------------
 # Titel bovenaan sidebar
 st.sidebar.markdown("## Dashboard Elektrische Voertuigen")
 
@@ -88,7 +117,7 @@ else:
             menu_icon="compass",
             default_index=0,
             styles={
-                "container": {"padding": "5!important", "background-color": "#2b2b2b"},
+                "container": {"padding": "5!important", "background-color": "#1E1E1E"},
                 "icon": {"color": "#00b4d8", "font-size": "20px"}, 
                 "nav-link": {
                     "font-size": "16px", 
