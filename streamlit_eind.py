@@ -52,26 +52,16 @@ st.markdown("""
         [data-testid="stMarkdownContainer"] h1, 
         [data-testid="stMarkdownContainer"] h2, 
         [data-testid="stMarkdownContainer"] h3, 
-        [data-testid="stMarkdownContainer"] p {
-            color: #E0E0E0;
-        }
-
-        /* Kaart container (folium) achtergrond aanpassing */
-        .folium-map {
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        /* Tabellen */
-        .stDataFrame {
+        [data-testid="stMarkdownContainer"] p, 
+        [data-testid="stMarkdownContainer"] label, 
+        [data-testid="stMarkdownContainer"] span {
             color: #E0E0E0 !important;
         }
 
-        /* Buttons */
-        .stButton>button {
-            background-color: #00b4d8;
-            color: #000;
+        /* Buttons, selectboxes en sliders */
+        .stButton>button, .stSelectbox>div>div>div, .stSlider>div>div>div {
+            background-color: #333 !important;
+            color: #E0E0E0 !important;
         }
 
         /* Hyperlinks */
@@ -83,14 +73,63 @@ st.markdown("""
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
+st.markdown("""
+    <style>
+        /* Achtergrond en tekst van hele app */
+        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            background-color: #121212;
+            color: #E0E0E0;
+        }
+
+        /* Sidebar achtergrond en tekst */
+        [data-testid="stSidebar"] {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+        }
+
+        /* Sidebar kopjes en labels */
+        [data-testid="stSidebar"] h1, 
+        [data-testid="stSidebar"] h2, 
+        [data-testid="stSidebar"] h3, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] span {
+            color: #E0E0E0 !important;
+        }
+
+        /* Hoofdcontent tekst en headers */
+        [data-testid="stMarkdownContainer"] h1, 
+        [data-testid="stMarkdownContainer"] h2, 
+        [data-testid="stMarkdownContainer"] h3, 
+        [data-testid="stMarkdownContainer"] p, 
+        [data-testid="stMarkdownContainer"] label, 
+        [data-testid="stMarkdownContainer"] span {
+            color: #E0E0E0 !important;
+        }
+
+        /* Buttons, selectboxes en sliders */
+        .stButton>button, .stSelectbox>div>div>div, .stSlider>div>div>div {
+            background-color: #333 !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Hyperlinks */
+        a {
+            color: #1E90FF !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Titel bovenaan sidebar
 st.sidebar.markdown("## Dashboard Elektrische Voertuigen")
 
 # Toggle voor versiekeuze
 use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 
-vandaag = datetime.now().strftime("%Y-%m-%d")
+# Huidige datum automatisch ophalen
+vandaag = datetime.now().strftime("%d %b %Y")
 
-# Mapping pagina namen (zonder emoji) naar versies met emoji
+# --- Paginanamen mapping ---
 page_mapping = {
     "Laadpalen": "⚡️ Laadpalen",
     "Voertuigen": "🚘 Voertuigen",
@@ -115,11 +154,14 @@ if not use_new_sidebar:
 # --- NIEUWE SIDEBAR ---
 else:
     with st.sidebar:
-        clean_names = list(page_mapping.keys())  # zonder emoji
+        # Voeg "Conclusie" toe
+        clean_names = list(page_mapping.keys()) + ["Conclusie"]  # zonder emoji
+        icons_list = ["lightning", "car-front", "bar-chart", "check2-circle"]  # icoon voor Conclusie
+
         selected_clean_page = option_menu(
             "Navigatie", 
             clean_names,
-            icons=["lightning", "car-front", "bar-chart"],  # Bootstrap icons
+            icons=icons_list,
             menu_icon="compass",
             default_index=0,
             styles={
@@ -137,10 +179,10 @@ else:
         )
 
         # Zet de geselecteerde pagina om naar de originele naam met emoji
-        selected_page = page_mapping[selected_clean_page]
-
-        # Toggle om te wisselen tussen oude en nieuwe versie van de Laadpalen pagina
-        use_new_laads_page = st.checkbox("Gebruik nieuwe Laadpalen pagina (Kaart + Infopaneel)", value=True)
+        if selected_clean_page == "Conclusie":
+            selected_page = "📌 Conclusie"
+        else:
+            selected_page = page_mapping[selected_clean_page]
 
         st.markdown("---")
         st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
@@ -164,29 +206,52 @@ def load_data():
 
 @st.cache_data(ttl=86400)
 def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
-    """Haalt laadpalen data van OpenChargeMap API"""
+    """Haalt laadpalen binnen een straal op."""
     url = "https://api.openchargemap.io/v3/poi/"
     params = {
         "output": "json",
+        "countrycode": "NL",
         "latitude": lat,
         "longitude": lon,
         "distance": radius,
-        "distanceunit": "KM",
-        "maxresults": 1000
+        "maxresults": 5000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
     }
-    headers = {"X-API-Key": "OCM-API-KEY-TEST"}  # pas aan als je een eigen key hebt
-    r = requests.get(url, params=params, headers=headers, timeout=30)
-    try:
-        data = r.json()
-    except Exception:
-        return pd.DataFrame()
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.json_normalize(data)
+    df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+    return df
+
+@st.cache_data(ttl=86400)
+def get_all_laadpalen_nederland() -> pd.DataFrame:
+    """Haalt laadpalen van heel Nederland op (voor grafieken)."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "maxresults": 10000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
     df = pd.json_normalize(data)
     return df
 
-# Verder helper functies en data cleaning...
-# (laat comments en overige code ongemoeid — zoals gevraagd)
+df_auto = load_data()
 
-# -------- Pagina 1 --------------------------
+
+# ======================================================
+#                   PAGINA-INDELING
+# ======================================================
+
+# ------------------- Pagina 1 --------------------------
 if page == "⚡️ Laadpalen":
     st.markdown("## Kaart Laadpalen Nederland")
     st.markdown("---")
@@ -203,227 +268,149 @@ if page == "⚡️ Laadpalen":
         "Noord-Holland": [52.5206, 4.7885, 60],
         "Zuid-Holland": [52.0116, 4.3571, 60],
         "Zeeland": [51.4940, 3.8497, 60],
-        "Noord-Brabant": [51.4816, 4.6961, 60],
-        "Limburg": [51.2499, 5.9918, 60],
+        "Noord-Brabant": [51.5730, 5.0670, 60],
+        "Limburg": [51.2490, 5.9330, 60],
     }
 
-    provincie_keuze = st.selectbox("Selecteer provincie / gebied", list(provincies.keys()), index=0)
-    center_lat, center_lon, center_radius = provincies[provincie_keuze]
+    provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
+    center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-    # Inladen dataset (sample of all data)
     with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
-        try:
-            df_all = pd.read_json("laadpalen_all.json")
-        except Exception:
-            # fallback: probeer via API (langzamer)
-            df_all = get_laadpalen_data(center_lat, center_lon, center_radius)
+        df = get_laadpalen_data(center_lat, center_lon, radius_km)
+        df_all = get_all_laadpalen_nederland()
 
-    # Zorg dat de kolomnamen consistent zijn (sommige datasets hebben andere namen)
-    # (data cleaning / normalisatie code — ongewijzigd)
-    def parse_cost(value):
-        if pd.isna(value):
-            return np.nan
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            if value.strip() == "":
-                return np.nan
-            if "free" in value.lower() or "gratis" in value.lower():
-                return 0.0
-            match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
-            return float(match.group(1)) if match else np.nan
-        return np.nan
+        if provincie_keuze != "Heel Nederland":
+            Laadpalen = df[df["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+        else:
+            Laadpalen = df
 
-    df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
-
-    df_all.loc[
-        (df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2),
-        "UsageCostClean"
-    ] = np.nan
-
-    if "PowerKW" in df_all.columns:
-        df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
-    elif "Connections.PowerKW" in df_all.columns:
-        df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections.PowerKW"], errors="coerce")
-    elif "Connections[0].PowerKW" in df_all.columns:
-        df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections[0].PowerKW"], errors="coerce")
-    else:
-        df_all["PowerKW_clean"] = np.nan
-
-    provincie_mapping = {
-        "Groningen": "Groningen",
-        "Friesland": "Friesland",
-        "Fryslân": "Friesland",
-        "Drenthe": "Drenthe",
-        "Overijssel": "Overijssel",
-        "Flevoland": "Flevoland",
-        "Gelderland": "Gelderland",
-        "Utrecht": "Utrecht",
-        "Noord-Holland": "Noord-Holland",
-        "Zuid-Holland": "Zuid-Holland",
-        "Zeeland": "Zeeland",
-        "Noord-Brabant": "Noord-Brabant",
-        "Limburg": "Limburg",
-    }
-
-    # Voeg 'Provincie' kolom toe indien mogelijk
-    def detect_provincie(row):
-        town = row.get("AddressInfo.Town") or ""
-        state = row.get("AddressInfo.StateOrProvince") or ""
-        for k, v in provincie_mapping.items():
-            if k.lower() in str(town).lower() or k.lower() in str(state).lower():
-                return v
-        return np.nan
-
-    df_all["Provincie"] = df_all.apply(detect_provincie, axis=1)
-
-    # Filter op geselecteerde provincie/gebied
-    if provincie_keuze != "Heel Nederland":
-        Laadpalen = df_all[df_all["Provincie"] == provincie_keuze].reset_index(drop=True)
-    else:
-        Laadpalen = df_all.reset_index(drop=True)
-
-    # Checkbox: laad alle laadpalen zonder popups
+    MAX_DEFAULT = 300  
+    st.write(f"Provincie: **{provincie_keuze}**")
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
 
     if len(Laadpalen) == 0:
         st.warning("Geen laadpalen gevonden voor deze locatie/provincie.")
         m = folium.Map(location=[center_lat, center_lon], zoom_start=8, tiles="OpenStreetMap")
-        
-        try:
-            use_new_laads_page
-        except NameError:
-            use_new_laads_page = True
-        if use_new_laads_page:
-            col_map, col_info = st.columns([3,1])
-            with col_map:
-                result = st_folium(m, width=900, height=650)
-            with col_info:
-                st.markdown("### Informatie")
-                last_clicked = result.get("last_clicked")
-                bounds = result.get("bounds")
-                # Toon coördinaten en zoom
-                if last_clicked:
-                    try:
-                        latc = last_clicked.get("lat", last_clicked.get("latitude"))
-                        lonc = last_clicked.get("lng", last_clicked.get("longitude"))
-                        st.write(f"**Geklikt op:** {latc:.6f}, {lonc:.6f}")
-                    except:
-                        st.write(f"**Geklikt op:** {last_clicked}")
-                else:
-                    st.write("Klik op de kaart om details te tonen.")
-                if bounds:
-                    st.write(f"**Kaart bounds:** {bounds}")
-                if result.get('zoom'):
-                    st.write(f"**Zoomniveau:** {result.get('zoom')}")
-                # Als dataset 'Laadpalen' aanwezig is, zoek de dichtstbijzijnde laadpaal
-                try:
-                    if 'Laadpalen' in locals() and last_clicked:
-                        latc = last_clicked.get('lat', last_clicked.get('latitude'))
-                        lonc = last_clicked.get('lng', last_clicked.get('longitude'))
-                        df_near = Laadpalen.copy()
-                        # Bereken afstand (grove benadering)
-                        df_near['__dist'] = ((df_near['AddressInfo.Latitude'] - latc)**2 + (df_near['AddressInfo.Longitude'] - lonc)**2)**0.5
-                        nearest = df_near.loc[df_near['__dist'].idxmin()]
-                        st.markdown("**Dichtstbijzijnde laadpaal:**")
-                        st.write(f"{nearest.get('AddressInfo.Title','Onbekend')}")
-                        st.write(nearest.get('AddressInfo.AddressLine1',''))
-                        st.write(f"Vermogen: {nearest.get('PowerKW','N/B')} kW")
-                        st.write(f"Kosten: {nearest.get('UsageCost','N/B')}")
-                except Exception as _e:
-                    # fail silently maar toon korte melding
-                    st.write("Kon nabijheid niet bepalen.")
-        else:
-            st_folium(m, width=900, height=650)
-
+        st_folium(m, width=900, height=650)
     else:
-        # Maak map en voeg markers toe
-        center_lat = center_lat
-        center_lon = center_lon
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=8, tiles="OpenStreetMap")
+        start_zoom = 8 if provincie_keuze == "Heel Nederland" else 10
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=start_zoom, tiles="OpenStreetMap")
 
-        # Marker cluster en subset (snelheidsoptimalisatie)
-        MAX_DEFAULT = 500
-        subset_df = Laadpalen.sample(n=min(len(Laadpalen), MAX_DEFAULT), random_state=1).reset_index(drop=True)
-        marker_cluster = MarkerCluster().add_to(m)
-        for _, row in subset_df.iterrows():
-            lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
-            popup = f"""
-            <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
-            {row.get('AddressInfo.AddressLine1', '')}<br>
-            {row.get('AddressInfo.Town', '')}<br>
-            Kosten: {row.get('UsageCost', 'N/B')}<br>
-            Vermogen: {row.get('PowerKW', 'N/B')} kW
-            """
-            icon = folium.Icon(color="green", icon="bolt", prefix="fa")
-            folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
-
-        st.success(f"{len(subset_df)} laadpalen met popups getoond (subset)")
-
-        try:
-            use_new_laads_page
-        except NameError:
-            use_new_laads_page = True
-        if use_new_laads_page:
-            col_map, col_info = st.columns([3,1])
-            with col_map:
-                result = st_folium(m, width=900, height=650)
-            with col_info:
-                st.markdown("### Informatie")
-                last_clicked = result.get("last_clicked")
-                bounds = result.get("bounds")
-                # Toon coördinaten en zoom
-                if last_clicked:
-                    try:
-                        latc = last_clicked.get("lat", last_clicked.get("latitude"))
-                        lonc = last_clicked.get("lng", last_clicked.get("longitude"))
-                        st.write(f"**Geklikt op:** {latc:.6f}, {lonc:.6f}")
-                    except:
-                        st.write(f"**Geklikt op:** {last_clicked}")
-                else:
-                    st.write("Klik op de kaart om details te tonen.")
-                if bounds:
-                    st.write(f"**Kaart bounds:** {bounds}")
-                if result.get('zoom'):
-                    st.write(f"**Zoomniveau:** {result.get('zoom')}")
-                # Als dataset 'Laadpalen' aanwezig is, zoek de dichtstbijzijnde laadpaal
-                try:
-                    if 'Laadpalen' in locals() and last_clicked:
-                        latc = last_clicked.get('lat', last_clicked.get('latitude'))
-                        lonc = last_clicked.get('lng', last_clicked.get('longitude'))
-                        df_near = Laadpalen.copy()
-                        # Bereken afstand (grove benadering)
-                        df_near['__dist'] = ((df_near['AddressInfo.Latitude'] - latc)**2 + (df_near['AddressInfo.Longitude'] - lonc)**2)**0.5
-                        nearest = df_near.loc[df_near['__dist'].idxmin()]
-                        st.markdown("**Dichtstbijzijnde laadpaal:**")
-                        st.write(f"{nearest.get('AddressInfo.Title','Onbekend')}")
-                        st.write(nearest.get('AddressInfo.AddressLine1',''))
-                        st.write(f"Vermogen: {nearest.get('PowerKW','N/B')} kW")
-                        st.write(f"Kosten: {nearest.get('UsageCost','N/B')}")
-                except Exception as _e:
-                    # fail silently maar toon korte melding
-                    st.write("Kon nabijheid niet bepalen.")
+        if laad_alle:
+            coords = list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
+            FastMarkerCluster(data=coords).add_to(m)
+            st.info(f"Snelmodus: alle laadpalen geladen (geen popups).")
         else:
-            st_folium(m, width=900, height=650)
+            subset_df = Laadpalen.sample(n=min(len(Laadpalen), MAX_DEFAULT), random_state=1).reset_index(drop=True)
+            marker_cluster = MarkerCluster().add_to(m)
+            for _, row in subset_df.iterrows():
+                lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
+                popup = f"""
+                <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                {row.get('AddressInfo.AddressLine1', '')}<br>
+                {row.get('AddressInfo.Town', '')}<br>
+                Kosten: {row.get('UsageCost', 'N/B')}<br>
+                Vermogen: {row.get('PowerKW', 'N/B')} kW
+                """
+                icon = folium.Icon(color="green", icon="bolt", prefix="fa")
+                folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
-        # ---- HEATMAP: Laadpatronen per dag en uur ----
-        st.subheader("Laadpatronen per dag en uur")
-        # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
-        st.subheader("Laadsessies per uur van de dag")
+            st.success(f"{len(subset_df)} laadpalen met popups geladen.")
+        st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
-        # (de rest van de visualisaties en analyses blijven ongewijzigd)
-        # ...
-        # Voorbeeld: aggregaties en kleinere grafieken
-        if len(Laadpalen) > 0:
-            df_agg = Laadpalen.groupby("Provincie").agg(
-                Aantal=("ID", "count"),
-                Gemiddelde_kosten=("UsageCostClean", "mean")
-            ).reset_index()
-            fig = px.bar(df_agg, x="Provincie", y="Aantal", title="Aantal laadpalen per provincie")
-            fig.update_layout(yaxis_title="Aantal")
-            st.plotly_chart(fig, use_container_width=True)
+    st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
+    #Grafiek verdeling laadpalen in nederland 
+    st.markdown("---")
+    st.markdown("## 📊 Verdeling laadpalen in Nederland")
+
+    if len(df_all) > 0:
+        def parse_cost(value):
+            if isinstance(value, str):
+                if "free" in value.lower() or "gratis" in value.lower():
+                    return 0.0
+                match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+                return float(match.group(1)) if match else np.nan
+            return np.nan
+
+        df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+
+        df_all.loc[
+            (df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2),
+            "UsageCostClean"
+        ] = np.nan
+
+        if "PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
+        elif "Connections.PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections.PowerKW"], errors="coerce")
+        elif "Connections[0].PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections[0].PowerKW"], errors="coerce")
         else:
-            st.warning("Kon geen landelijke data laden voor de grafiek.")
+            df_all["PowerKW_clean"] = np.nan
+
+        provincie_mapping = {
+            "Groningen": "Groningen",
+            "Friesland": "Friesland",
+            "Fryslân": "Friesland",
+            "Drenthe": "Drenthe",
+            "Overijssel": "Overijssel",
+            "Flevoland": "Flevoland",
+            "Gelderland": "Gelderland",
+            "Utrecht": "Utrecht",
+            "Noord-Holland": "Noord-Holland",
+            "North Holland": "Noord-Holland",
+            "Zuid-Holland": "Zuid-Holland",
+            "South Holland": "Zuid-Holland",
+            "Zeeland": "Zeeland",
+            "Noord-Brabant": "Noord-Brabant",
+            "North Brabant": "Noord-Brabant",
+            "Limburg": "Limburg"
+        }
+
+        df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
+        df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
+
+        df_agg = (
+            df_all.groupby("Provincie")
+            .agg(
+                Aantal_palen=("ID", "count"),
+                Gemiddelde_kosten=("UsageCostClean", "mean"),
+            )
+            .reset_index()
+        )
+
+        totaal = df_agg["Aantal_palen"].sum()
+        df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
+        df_agg = df_agg.sort_values("Percentage", ascending=False)
+
+        keuze = st.selectbox(
+            "📈 Kies welke verdeling je wilt zien:",
+            ["Verdeling laadpalen per provincie (%)", "Gemiddelde kosten per provincie"]
+        )
+
+        if keuze == "Verdeling laadpalen per provincie (%)":
+            fig = px.bar(
+                df_agg,
+                x="Provincie",
+                y="Percentage",
+                title="Verdeling laadpalen per provincie (%)",
+                text=df_agg["Percentage"].apply(lambda x: f"{x:.1f}%")
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_layout(yaxis_title="Percentage van totaal (%)")
+        elif keuze == "Gemiddelde kosten per provincie":
+            fig = px.bar(
+                df_agg,
+                x="Provincie",
+                y="Gemiddelde_kosten",
+                title="Gemiddelde kosten per provincie (€ per kWh)"
+            )
+            fig.update_layout(yaxis_title="€ per kWh")
+
+        fig.update_layout(xaxis_title="Provincie", showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Kon geen landelijke data laden voor de grafiek.")
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     st.markdown("## Elektrische Voertuigen & laadtijden")
