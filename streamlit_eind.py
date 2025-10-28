@@ -73,6 +73,11 @@ st.markdown("""
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
+import streamlit as st
+from datetime import datetime
+from streamlit_option_menu import option_menu
+
+# --- STIJLEN ---
 st.markdown("""
     <style>
         /* Achtergrond en tekst van hele app */
@@ -133,11 +138,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Titel bovenaan sidebar
+# --- TITEL SIDEBAR ---
 st.sidebar.markdown("## Dashboard Elektrische Voertuigen")
-
-# Toggle voor versiekeuze
-use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 
 # Huidige datum automatisch ophalen
 vandaag = datetime.now().strftime("%d %b %Y")
@@ -148,6 +150,11 @@ page_mapping = {
     "Voertuigen": "🚘 Voertuigen",
     "Voorspellend model": "📊 Voorspellend model"
 }
+
+# --- TOGGLE VOOR VERSIE (ONDERAAN SIDEBAR) ---
+# Plaats toggle onderaan door eerst spacer te gebruiken
+st.sidebar.markdown("<div style='flex: 1 1 auto;'></div>", unsafe_allow_html=True)
+use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 
 # --- OUDE SIDEBAR ---
 if not use_new_sidebar:
@@ -204,11 +211,7 @@ else:
         st.write("Voor het laatst geüpdatet op:")
         st.write(f"*{vandaag}*")
 
-# --- Toon geselecteerde pagina bovenaan de main content ---
-st.title("📊 Dashboard")
-st.caption(f"Geselecteerde pagina: **{selected_page}**")
-
-# Gebruik altijd `selected_page` verder in je code
+# --- GEBRUIK DE SELECTED PAGE ---
 page = selected_page
 
 # ------------------- Data inladen -----------------------
