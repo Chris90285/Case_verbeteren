@@ -45,7 +45,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Titel bovenaan sidebar
-st.sidebar.markdown("## ⚙️ Sidebar instellingen")
+st.sidebar.markdown("## Dashboard Elektrische Voertuigen")
 
 # Toggle voor versiekeuze
 use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
@@ -83,7 +83,7 @@ else:
                 "Voertuigen",
                 "Voorspellend model"
             ],
-            icons=["bolt", "car-front", "bar-chart"],
+            icons=["zap", "car-front", "bar-chart"],
             menu_icon="compass",
             default_index=0,
             styles={
