@@ -25,8 +25,13 @@ from streamlit_option_menu import option_menu
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
 
+# ------------------- Sidebar ---------------------------
+# ------------------------------------------------------
+
+
 # Titel bovenaan sidebar
 st.sidebar.markdown("## ⚙️ Sidebar instellingen")
+
 # Toggle voor versiekeuze
 use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 
@@ -38,7 +43,7 @@ if not use_new_sidebar:
     st.sidebar.markdown("## Laadpalen & Elektrische Voertuigen")
     st.sidebar.markdown("---")
 
-    page = st.sidebar.selectbox(
+    selected_page = st.sidebar.selectbox(
         "Selecteer een pagina",
         [
             "⚡️ Laadpalen",
@@ -56,10 +61,14 @@ if not use_new_sidebar:
 # --- NIEUWE (VERBETERDE) SIDEBAR ---
 else:
     with st.sidebar:
-        pagina = option_menu(
+        selected_page = option_menu(
             "🚀 Navigatie", 
-            ["Introductie", "Data verkenning", "Correlatie", "Analyse fietstochten", "Voorspellend model", "Conclusie"],
-            icons=["house", "bar-chart", "graph-up", "bicycle", "cpu", "check2-circle"],
+            [
+                "⚡️ Laadpalen",
+                "🚘 Voertuigen",
+                "📊 Voorspellend model"
+            ],
+            icons=["bolt", "car-front", "bar-chart"],
             menu_icon="compass",
             default_index=0,
             styles={
@@ -81,12 +90,12 @@ else:
         st.write("Voor het laatst geüpdatet op:")
         st.write(f"*{vandaag}*")
 
-# --- Optioneel: Toon geselecteerde pagina in main content ---
+# --- Toon geselecteerde pagina bovenaan de main content ---
 st.title("📊 Dashboard")
-if not use_new_sidebar:
-    st.write(f"Geselecteerde pagina (oude sidebar): **{page}**")
-else:
-    st.write(f"Geselecteerde pagina (nieuwe sidebar): **{pagina}**")
+st.caption(f"Geselecteerde pagina: **{selected_page}**")
+
+# Gebruik altijd `selected_page` verder in je code
+page = selected_page
 
 
 # ------------------- Data inladen -----------------------
