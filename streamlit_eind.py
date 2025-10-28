@@ -1,28 +1,4 @@
-# ======================================================
-# DASHBOARD: Laadpalen & Elektrische Voertuigen
-# ======================================================
-
-# ------------------- Imports --------------------------
-# ------------------------------------------------------
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import numpy as np
-import folium
-import requests
-import re
-from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster, FastMarkerCluster
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-import matplotlib.pyplot as plt
-import warnings
-import pickle
-import io
-import plotly.graph_objects as go
-from datetime import datetime
-from streamlit_option_menu import option_menu
-
-# ------------------- Dark Mode Styling ----------------
+# ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
 st.markdown("""
     <style>
@@ -71,8 +47,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ------------------- Sidebar ---------------------------
-# ------------------------------------------------------
 # Titel bovenaan sidebar
 st.sidebar.markdown("## Dashboard Elektrische Voertuigen")
 
@@ -83,8 +57,6 @@ use_new_sidebar = st.sidebar.toggle("Gebruik nieuwe sidebar", value=False)
 vandaag = datetime.now().strftime("%d %b %Y")
 
 # --- Paginanamen mapping ---
-# Key = naam zonder emoji (getoond in nieuwe sidebar)
-# Value = originele naam met emoji (gebruikt in code)
 page_mapping = {
     "Laadpalen": "⚡️ Laadpalen",
     "Voertuigen": "🚘 Voertuigen",
@@ -143,57 +115,8 @@ else:
 st.title("📊 Dashboard")
 st.caption(f"Geselecteerde pagina: **{selected_page}**")
 
-# --- Gebruik `selected_page` verder in je code zoals altijd ---
+# Gebruik altijd `selected_page` verder in je code
 page = selected_page
-
-# ------------------- Data inladen -----------------------
-# -------------------------------------------------------
-@st.cache_data
-def load_data():
-    df_auto = pd.read_csv("duitse_automerken_JA.csv")
-    return df_auto
-
-@st.cache_data(ttl=86400)
-def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
-    """Haalt laadpalen binnen een straal op."""
-    url = "https://api.openchargemap.io/v3/poi/"
-    params = {
-        "output": "json",
-        "countrycode": "NL",
-        "latitude": lat,
-        "longitude": lon,
-        "distance": radius,
-        "maxresults": 5000,
-        "compact": True,
-        "verbose": False,
-        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-    }
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
-    df = pd.json_normalize(data)
-    df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
-    return df
-
-@st.cache_data(ttl=86400)
-def get_all_laadpalen_nederland() -> pd.DataFrame:
-    """Haalt laadpalen van heel Nederland op (voor grafieken)."""
-    url = "https://api.openchargemap.io/v3/poi/"
-    params = {
-        "output": "json",
-        "countrycode": "NL",
-        "maxresults": 10000,
-        "compact": True,
-        "verbose": False,
-        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-    }
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
-    df = pd.json_normalize(data)
-    return df
-
-df_auto = load_data()
 
 
 # ======================================================
