@@ -117,6 +117,19 @@ st.markdown("""
         a {
             color: #1E90FF !important;
         }
+
+        /* Optiemenu minimaliseer padding tussen knoppen */
+        .option-menu .nav-link {
+            margin-bottom: 2px !important;  /* minder ruimte tussen items */
+            padding-bottom: 4px !important;
+            padding-top: 4px !important;
+        }
+
+        /* Verminder marge van de horizontale lijn */
+        hr {
+            margin-top: 4px !important;
+            margin-bottom: 4px !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -170,7 +183,8 @@ else:
                 "nav-link": {
                     "font-size": "16px", 
                     "text-align": "left", 
-                    "margin": "5px", 
+                    "margin": "2px 0 !important",  # minder marge
+                    "padding": "4px 5px !important",
                     "--hover-color": "#3a3a3a",
                     "color": "white"
                 },
