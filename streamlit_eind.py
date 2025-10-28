@@ -1,3 +1,76 @@
+# ======================================================
+# DASHBOARD: Laadpalen & Elektrische Voertuigen
+# ======================================================
+
+# ------------------- Imports --------------------------
+# ------------------------------------------------------
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import numpy as np
+import folium
+import requests
+import re
+from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster, FastMarkerCluster
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+import matplotlib.pyplot as plt
+import warnings
+import pickle
+import io
+import plotly.graph_objects as go
+from datetime import datetime
+from streamlit_option_menu import option_menu
+
+# ------------------- Dark Mode Styling ----------------
+# ------------------------------------------------------
+st.markdown("""
+    <style>
+        /* Achtergrond en tekst van hele app */
+        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            background-color: #121212;
+            color: #E0E0E0;
+        }
+
+        /* Sidebar achtergrond en tekst */
+        [data-testid="stSidebar"] {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+        }
+
+        /* Sidebar kopjes en labels */
+        [data-testid="stSidebar"] h1, 
+        [data-testid="stSidebar"] h2, 
+        [data-testid="stSidebar"] h3, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] span {
+            color: #E0E0E0 !important;
+        }
+
+        /* Hoofdcontent tekst en headers */
+        [data-testid="stMarkdownContainer"] h1, 
+        [data-testid="stMarkdownContainer"] h2, 
+        [data-testid="stMarkdownContainer"] h3, 
+        [data-testid="stMarkdownContainer"] p, 
+        [data-testid="stMarkdownContainer"] label, 
+        [data-testid="stMarkdownContainer"] span {
+            color: #E0E0E0 !important;
+        }
+
+        /* Buttons, selectboxes en sliders */
+        .stButton>button, .stSelectbox>div>div>div, .stSlider>div>div>div {
+            background-color: #333 !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Hyperlinks */
+        a {
+            color: #1E90FF !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
 st.markdown("""
@@ -117,6 +190,55 @@ st.caption(f"Geselecteerde pagina: **{selected_page}**")
 
 # Gebruik altijd `selected_page` verder in je code
 page = selected_page
+
+# ------------------- Data inladen -----------------------
+# -------------------------------------------------------
+@st.cache_data
+def load_data():
+    df_auto = pd.read_csv("duitse_automerken_JA.csv")
+    return df_auto
+
+@st.cache_data(ttl=86400)
+def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
+    """Haalt laadpalen binnen een straal op."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "latitude": lat,
+        "longitude": lon,
+        "distance": radius,
+        "maxresults": 5000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.json_normalize(data)
+    df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+    return df
+
+@st.cache_data(ttl=86400)
+def get_all_laadpalen_nederland() -> pd.DataFrame:
+    """Haalt laadpalen van heel Nederland op (voor grafieken)."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "maxresults": 10000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.json_normalize(data)
+    return df
+
+df_auto = load_data()
 
 
 # ======================================================
