@@ -587,7 +587,7 @@ if page == "⚡️ Laadpalen":
             m = folium.Map(
                 location=[
                     center_lat,
-                    center_lon + (3.0 if provincie_keuze == "Heel Nederland" else 1.0)
+                    center_lon + (3.0 if provincie_keuze == "Heel Nederland" else 0.8)
                 ],
                 zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
                 tiles="OpenStreetMap"
