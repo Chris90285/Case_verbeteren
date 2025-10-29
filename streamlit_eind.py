@@ -605,12 +605,51 @@ if page == "⚡️ Laadpalen":
                 else:
                     return {"fillColor": "#2b2b2b", "color": "black", "weight": 1.5, "fillOpacity": 0.5}
 
+            def style_function(feature):
+                naam = feature["properties"].get("Provincie_NL", "Onbekend")
+
+                # Basisstijl voor alles
+                base_style = {
+                    "color": "black",
+                    "weight": 1.2,
+                    "fillColor": "#2b2b2b",
+                    "fillOpacity": 0.4,
+                }
+
+                # Alleen rood randje voor geselecteerde provincie (niet bij heel NL)
+                if provincie_keuze != "Heel Nederland" and naam == provincie_keuze:
+                    base_style.update({
+                        "color": "#b30000",   # donkerrood
+                        "weight": 3,
+                        "fillColor": "#2b2b2b",
+                        "fillOpacity": 0.5,
+                    })
+
+                return base_style
+
+
+            # 👇 Nieuw: highlight bij hover als “Heel Nederland” is gekozen
+            highlight_function = None
+            if provincie_keuze == "Heel Nederland":
+                highlight_function = lambda x: {
+                    "fillColor": "#4b4b4b",   # donkergrijs bij hover
+                    "fillOpacity": 0.6,
+                    "color": "#cc0000",       # rood randje bij hover (niet te fel)
+                    "weight": 3,
+                }
+
             folium.GeoJson(
                 gdf,
                 name="Provinciegrenzen",
                 style_function=style_function,
-                tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False)
+                highlight_function=highlight_function,
+                tooltip=folium.GeoJsonTooltip(
+                    fields=["Provincie_NL"],
+                    aliases=["Provincie:"],
+                    labels=False
+                )
             ).add_to(m)
+
 
             # Laadpalen op kaart
             if provincie_keuze == "Heel Nederland":
