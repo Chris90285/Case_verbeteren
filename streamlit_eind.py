@@ -441,6 +441,7 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
+
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
             """Laadt de provinciegrenzen van Nederland (GeoJSON)."""
@@ -457,6 +458,12 @@ if page == "⚡️ Laadpalen":
         with st.spinner("Provinciegrenzen laden..."):
             gdf = load_provincie_grenzen()
 
+        # Controleer kolomnamen
+        st.write("Kolommen in GeoJSON:", list(gdf.columns))
+
+        # Kies juiste kolomnaam voor tooltip
+        tooltip_col = "PROV_NAAM" if "PROV_NAAM" in gdf.columns else gdf.columns[0]
+
         # Maak folium kaart
         m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="OpenStreetMap")
 
@@ -465,12 +472,12 @@ if page == "⚡️ Laadpalen":
             gdf,
             name="Provinciegrenzen",
             style_function=lambda feature: {
-                "fillColor": "#00000000",   # transparante vulling
-                "color": "#00b4d8",         # turquoise lijnkleur
+                "fillColor": "#00000000",   # transparant
+                "color": "#00b4d8",         # turquoise lijnen
                 "weight": 2,
                 "dashArray": "5, 5"
             },
-            tooltip=folium.GeoJsonTooltip(fields=["provincie"], aliases=["Provincie:"])
+            tooltip=folium.GeoJsonTooltip(fields=[tooltip_col], aliases=["Provincie:"])
         ).add_to(m)
 
         st_folium(m, width=900, height=650)
