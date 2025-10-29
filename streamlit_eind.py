@@ -515,7 +515,7 @@ if page == "⚡️ Laadpalen":
         provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-        # === NIEUW: reset zoomniveau bij wisselen provincie ===
+        # === NIEUW: zoomniveau
         st.session_state["zoom_level"] = 7 if provincie_keuze == "Heel Nederland" else 9
 
         # ------------------- Data Ophalen ------------------------
@@ -530,7 +530,7 @@ if page == "⚡️ Laadpalen":
             st.warning("Geen laadpalen gevonden.")
             st.stop()
 
-        # ------------------- Kostenberekening (zelfde als oude pagina) -------------------
+        # ------------------- Kostenberekening -------------------
         def parse_cost(value):
             if isinstance(value, str):
                 if "free" in value.lower() or "gratis" in value.lower():
@@ -555,11 +555,7 @@ if page == "⚡️ Laadpalen":
         df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
         df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
 
-        df_agg = (
-            df_all.groupby("Provincie")
-            .agg(Gemiddelde_kosten=("UsageCostClean", "mean"))
-            .reset_index()
-        )
+        df_agg = df_all.groupby("Provincie").agg(Gemiddelde_kosten=("UsageCostClean", "mean")).reset_index()
 
         # ---------------- Filter data per provincie -------------------
         if provincie_keuze != "Heel Nederland":
@@ -579,38 +575,72 @@ if page == "⚡️ Laadpalen":
                 return "Gratis"
             return f"€{val:.2f}"
 
-        # ---------------- Zoek gratis laadpalen met jaarabonnement ----------------
+        # ---------------- Zoek gratis laadpalen ----------------
         gratis_df = df_prov[df_prov["UsageCost"].astype(str).str.contains("jaarabonnement", case=False, na=False)]
         gratis_df = gratis_df.dropna(subset=["AddressInfo.AddressLine1", "AddressInfo.Latitude", "AddressInfo.Longitude"])
         gratis_df = gratis_df.head(10)
 
-        # ------------------- Layout: Kaart + Zijblok ------------------------
+        # ------------------- Layout ------------------------
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         if "map_center" not in st.session_state:
             st.session_state["map_center"] = (center_lat, center_lon)
         if "highlight_id" not in st.session_state:
             st.session_state["highlight_id"] = None
-        # === NIEUW ===
         if "zoom_level" not in st.session_state:
             st.session_state["zoom_level"] = 7 if provincie_keuze == "Heel Nederland" else 9
 
         with col1:
             center_lat, center_lon = st.session_state["map_center"]
 
+            # Gebruik alleen één style_function (oude werkende)
+            def style_function(feature):
+                naam = feature["properties"].get("Provincie_NL", "Onbekend")
+                base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
+                if provincie_keuze != "Heel Nederland" and naam == provincie_keuze:
+                    base_style.update({"color": "#b30000", "weight": 3})
+                return base_style
+
+            highlight_function = None
+            if provincie_keuze == "Heel Nederland":
+                highlight_function = lambda x: {"fillColor": "#4b4b4b", "fillOpacity": 0.6, "color": "#cc0000", "weight": 3}
+
             m = folium.Map(
-                location=[
-                    center_lat,
-                    center_lon + (3.0 if provincie_keuze == "Heel Nederland" else 0.8)
-                ],
-                zoom_start=st.session_state["zoom_level"],  # 👈 aangepast
+                location=[center_lat, center_lon + (3.0 if provincie_keuze == "Heel Nederland" else 0.8)],
+                zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
 
-            # (alles hier blijft exact gelijk)
-            # ...
-            # (gehele map render code blijft ongewijzigd)
-            # ...
+            folium.GeoJson(
+                gdf,
+                name="Provinciegrenzen",
+                style_function=style_function,
+                highlight_function=highlight_function,
+                tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False)
+            ).add_to(m)
+
+            # Laadpalen toevoegen
+            if provincie_keuze == "Heel Nederland":
+                coords = [(lat, lon) for lat, lon in zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]) if not (pd.isna(lat) or pd.isna(lon))]
+                FastMarkerCluster(data=coords).add_to(m)
+            else:
+                marker_cluster = MarkerCluster().add_to(m)
+                for _, row in df_prov.iterrows():
+                    lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
+                    if pd.isna(lat) or pd.isna(lon):
+                        continue
+                    popup = f"<b>{row.get('AddressInfo.Title','Onbekend')}</b><br>{row.get('AddressInfo.AddressLine1','')}<br>{row.get('AddressInfo.Town','')}<br>Kosten: {row.get('UsageCost','N/B')}<br>Vermogen: {row.get('PowerKW','N/B')} kW"
+                    folium.Marker(location=[lat, lon], popup=folium.Popup(popup,max_width=300), icon=folium.Icon(color="green", icon="bolt", prefix="fa")).add_to(marker_cluster)
+
+            # Highlight geselecteerde marker
+            if st.session_state.get("highlight_id") is not None:
+                selected_row = df_prov[df_prov["ID"] == st.session_state["highlight_id"]]
+                if not selected_row.empty:
+                    sel = selected_row.iloc[0]
+                    lat_sel, lon_sel = sel["AddressInfo.Latitude"], sel["AddressInfo.Longitude"]
+                    if not (pd.isna(lat_sel) or pd.isna(lon_sel)):
+                        popup_sel = f"<b>{sel.get('AddressInfo.Title','Onbekend')}</b><br>{sel.get('AddressInfo.AddressLine1','')}<br>{sel.get('AddressInfo.Town','')}<br>Kosten: {sel.get('UsageCost','N/B')}<br>Vermogen: {sel.get('PowerKW','N/B')} kW"
+                        folium.Marker(location=[lat_sel, lon_sel], popup=folium.Popup(popup_sel,max_width=300), icon=folium.Icon(color="red", icon="bolt", prefix="fa")).add_to(m)
 
             st_data = st_folium(m, width=900, height=650)
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
@@ -633,14 +663,10 @@ if page == "⚡️ Laadpalen":
                         town = row.get("AddressInfo.Town", "")
                         lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
 
-                        # === NIEUW: klik zoom/clickfix ===
                         if st.button(f"📍 {addr}, {town}", key=f"btn_{i}"):
                             st.session_state["map_center"] = (lat, lon)
                             st.session_state["highlight_id"] = row["ID"]
-                            if provincie_keuze == "Heel Nederland":
-                                st.session_state["zoom_level"] = 15
-                            else:
-                                st.session_state["zoom_level"] = 11
+                            st.session_state["zoom_level"] = 15 if provincie_keuze == "Heel Nederland" else 11
                             st.rerun()
                 else:
                     st.info("Geen gratis laadpalen met jaarabonnement gevonden in dit gebied.")
