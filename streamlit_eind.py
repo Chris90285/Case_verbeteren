@@ -443,16 +443,6 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-
-        @st.cache_data(ttl=86400)
-        def load_provincie_grenzen():
-            """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
-            url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
-            gdf = gpd.read_file(url)
-            if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
-                gdf = gdf.to_crs(epsg=4326)
-            return gdf
-
         # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
@@ -533,38 +523,49 @@ if page == "⚡️ Laadpalen":
                 if "free" in value.lower() or "gratis" in value.lower():
                     return 0.0
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
-                return float(match.group(1)) if match else np.nan
+                if match:
+                    val = float(match.group(1))
+                    # filter foutieve sessieprijzen zoals "40 euro per sessie"
+                    if val > 2.0:
+                        return np.nan
+                    return val
             return np.nan
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
-        ####
-
 
         # --- Providerinformatie  ---
+        def extract_operator_name(op):
+            if isinstance(op, dict):
+                return op.get("Title", np.nan)
+            elif isinstance(op, str):
+                try:
+                    j = json.loads(op)
+                    return j.get("Title", np.nan)
+                except Exception:
+                    return op if len(op) < 60 else np.nan
+            return np.nan
+
         if "OperatorInfo.Title" in df_all.columns:
             df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
         elif "OperatorInfo" in df_all.columns:
-            
-            def extract_operator_name(op):
-                if isinstance(op, dict):
-                    return op.get("Title", np.nan)
-                elif isinstance(op, str):
-                    try:
-                        j = json.loads(op)
-                        return j.get("Title", np.nan)
-                    except Exception:
-                        return np.nan
-                else:
-                    return np.nan
             df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
         else:
             df_all["OperatorTitle"] = np.nan
 
-        ###
+        # ---------------- Filter per provincie -------------------
         if provincie_keuze != "Heel Nederland":
             df_prov = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
         else:
             df_prov = df_all.copy()
+
+        # ---------------- Koppeling met data uit eerdere grafiek ----------------
+        # Stel dat jouw eerste kaart de variabele 'df_filtered' gebruikt (al gefilterd)
+        # Gebruik die dan hier zodat alle cijfers overeenkomen:
+        try:
+            if "df_filtered" in locals() and not df_filtered.empty:
+                df_prov = df_filtered.copy()
+        except Exception:
+            pass
 
         # Gemiddelde, min en max kosten
         gemiddelde = df_prov["UsageCostClean"].mean()
@@ -572,14 +573,17 @@ if page == "⚡️ Laadpalen":
         duurste = df_prov["UsageCostClean"].max()
 
         # Top 5 providers
-        provider_counts = df_prov["OperatorTitle"].value_counts().head(5).reset_index()
+        provider_counts = (
+            df_prov["OperatorTitle"]
+            .dropna()
+            .value_counts()
+            .head(5)
+            .reset_index()
+        )
         provider_counts.columns = ["Provider", "Aantal"]
 
         # ------------------- Layout: Kaart + Zijblok ------------------------
-        col1, col2 = st.columns([2.5, 1.6], gap="large")
-
-        
-
+        col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
             # ------------------- Kaart Maken ------------------------
@@ -599,15 +603,11 @@ if page == "⚡️ Laadpalen":
                 else:
                     return {"fillColor": "#2b2b2b", "color": "black", "weight": 1.5, "fillOpacity": 0.5}
 
-            def highlight_function(feature):
-                return {"fillColor": "#4f4f4f", "fillOpacity": 0.4, "color": "#b30000", "weight": 2.5}
-
             folium.GeoJson(
                 gdf,
                 name="Provinciegrenzen",
                 style_function=style_function,
-                highlight_function=highlight_function,
-                tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False, sticky=True)
+                tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False)
             ).add_to(m)
 
             # ------------------- Laadpalen op kaart -------------------
@@ -623,14 +623,16 @@ if page == "⚡️ Laadpalen":
                     {row.get('AddressInfo.AddressLine1', '')}<br>
                     {row.get('AddressInfo.Town', '')}<br>
                     Kosten: {row.get('UsageCost', 'N/B')}<br>
+                    Provider: {row.get('OperatorTitle', 'Onbekend')}<br>
                     Vermogen: {row.get('PowerKW', 'N/B')} kW
                     """
-                    icon = folium.Icon(color="green", icon="bolt", prefix="fa")
-                    folium.Marker(location=[lat, lon],
-                                popup=folium.Popup(popup, max_width=300),
-                                icon=icon).add_to(marker_cluster)
+                    folium.Marker(
+                        location=[lat, lon],
+                        popup=folium.Popup(popup, max_width=300),
+                        icon=folium.Icon(color="green", icon="bolt", prefix="fa")
+                    ).add_to(marker_cluster)
 
-            st_folium(m, width=850, height=650)
+            st_folium(m, width=900, height=650)
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
 
         with col2:
@@ -666,6 +668,7 @@ if page == "⚡️ Laadpalen":
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     if not nieuwe_pagina:
