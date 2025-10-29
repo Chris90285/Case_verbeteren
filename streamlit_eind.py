@@ -442,7 +442,6 @@ if page == "⚡️ Laadpalen":
 
     else:
 
-
         # ------------------- Data Functie -----------------------
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
@@ -460,11 +459,24 @@ if page == "⚡️ Laadpalen":
         with st.spinner("Provinciegrenzen laden..."):
             gdf = load_provincie_grenzen()
 
-        # ------------------- Naam Correctie ----------------------
-        # Cartomap gebruikt PROV_NAAM als kolom
-        prov_col = "PROV_NAAM" if "PROV_NAAM" in gdf.columns else gdf.columns[0]
+        # ------------------- Naam Correctie / Mapping ----------------------
+        # Mapping PV-codes (gegeven door jou)
+        pv_to_nl = {
+            "PV27": "Noord-Holland",
+            "PV21": "Friesland",
+            "PV20": "Groningen",
+            "PV22": "Drenthe",
+            "PV24": "Flevoland",
+            "PV23": "Overijssel",
+            "PV25": "Gelderland",
+            "PV28": "Zuid-Holland",
+            "PV26": "Utrecht",
+            "PV29": "Zeeland",
+            "PV30": "Noord-Brabant",
+            "PV31": "Limburg"
+        }
 
-        # Mapping om consistent te zijn met jouw eerdere code
+        # Oorspronkelijke mapping (zoals in jouw oude code) voor eventuele alternatieve naamgevingen
         provincie_mapping = {
             "Groningen": "Groningen",
             "Friesland": "Friesland",
@@ -484,8 +496,43 @@ if page == "⚡️ Laadpalen":
             "Limburg": "Limburg"
         }
 
-        # Normaliseer provincie-namen in de GeoDataFrame
-        gdf["Provincie"] = gdf[prov_col].replace(provincie_mapping)
+        # Detecteer kolom met provincienaam in bron (bijv. PROV_NAAM of soortgelijk)
+        mogelijke_kolommen = ["PROV_NAAM", "provincie", "Provincie", "statnaam", "naam"]
+        bron_name_col = next((c for c in mogelijke_kolommen if c in gdf.columns), None)
+
+        # Detecteer kolom waarin PVxx codes voorkomen (waarde-match)
+        code_col = None
+        for c in gdf.columns:
+            # check of enige waarde in kolom matcht op 'PV' gevolgd door digits
+            sample_vals = gdf[c].astype(str).dropna().unique()[:10]
+            if any(re.match(r"^PV\d{1,3}$", str(v)) for v in sample_vals):
+                code_col = c
+                break
+
+        # Maak uniforme Nederlandstalige kolom 'Provincie_NL'
+        if code_col is not None:
+            # gebruik PV-code mapping
+            gdf["ProvCode"] = gdf[code_col].astype(str)
+            gdf["Provincie_NL"] = gdf["ProvCode"].map(pv_to_nl)
+            # fallback: indien mapping niet beschikbaar, probeer bron_name_col
+            if bron_name_col is not None:
+                gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[bron_name_col].replace(provincie_mapping))
+            else:
+                gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[code_col])
+        else:
+            # geen PV-kolom gevonden: gebruik bron kolom en mapping
+            if bron_name_col is not None:
+                gdf["Provincie_NL"] = gdf[bron_name_col].replace(provincie_mapping)
+            else:
+                # uiterste fallback: eerste kolom
+                first_col = gdf.columns[0]
+                gdf["Provincie_NL"] = gdf[first_col].astype(str).replace(provincie_mapping)
+
+        # Zorg dat er geen NaN in Provincie_NL voorkomt (voorkom problemen in tooltip)
+        gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna("Onbekend")
+
+        # Voor eenvoud in stijl/vergleich, voeg ook 'Provincie' kolom toe
+        gdf["Provincie"] = gdf["Provincie_NL"]
 
         # ------------------- Dropdown Keuze ---------------------
         provincies = {
@@ -504,7 +551,7 @@ if page == "⚡️ Laadpalen":
             "Limburg": [51.2490, 5.9330, 9],
         }
 
-        provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
+        provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
         center_lat, center_lon, zoom = provincies[provincie_keuze]
 
         # ------------------- Kaart Maken ------------------------
@@ -512,18 +559,22 @@ if page == "⚡️ Laadpalen":
 
         # Stijl-functie: gekozen provincie transparant, rest grijs
         def style_function(feature):
-            naam = feature["properties"]["Provincie"]
+            # feature['properties'] bevat de originele eigenschappen; wij maakten 'Provincie' in gdf
+            naam = feature["properties"].get("Provincie") or feature["properties"].get("Provincie_NL") or feature["properties"].get("PROV_NAAM")
+            # fallback to value from gdf if absent
+            if naam is None:
+                # probeer zoeken op id (niet strikt nodig)
+                naam = "Onbekend"
             if provincie_keuze == "Heel Nederland":
-                # Toon alles transparant
                 return {
                     "fillColor": "#00000000",
-                    "color": "#050606",
+                    "color": "#00b4d8",
                     "weight": 1.5
                 }
             elif naam == provincie_keuze:
                 return {
                     "fillColor": "#00000000",  # transparant
-                    "color": "#050606",        
+                    "color": "#00b4d8",        # turquoise rand
                     "weight": 3
                 }
             else:
@@ -534,23 +585,16 @@ if page == "⚡️ Laadpalen":
                     "fillOpacity": 0.5
                 }
 
-        # ------------------- Grenzen Toevoegen ------------------
-        # Automatische detectie van de juiste kolomnaam
-        mogelijke_kolommen = ["Provincie", "PROV_NAAM", "statnaam", "provincie", "naam"]
-        kolom_nl = next((c for c in mogelijke_kolommen if c in gdf.columns), None)
+        # ------------------- Grenzen Toevoegen met NL-tooltips ------------------
+        from folium.features import GeoJson, GeoJsonTooltip
 
-        if kolom_nl is None:
-            raise ValueError("Kon geen kolom met provincienamen vinden in het GeoJSON.")
-
-        # Maak een nette Nederlandstalige kolom aan
-        gdf["Provincie_NL"] = gdf[kolom_nl].replace(provincie_mapping)
-
-        # Voeg de kaartlaag toe met tooltip in het Nederlands
-        folium.GeoJson(
+        # Zorg dat de GeoJSON properties ook de 'Provincie_NL' bevatten (GeoJson bouwt properties van gdf)
+        # (gdf heeft de kolom; GeoJson(gdf) pakt die automatisch mee)
+        GeoJson(
             gdf,
             name="Provinciegrenzen",
             style_function=style_function,
-            tooltip=folium.GeoJsonTooltip(
+            tooltip=GeoJsonTooltip(
                 fields=["Provincie_NL"],
                 aliases=["Provincie:"],
                 labels=False,
@@ -559,18 +603,14 @@ if page == "⚡️ Laadpalen":
             highlight_function=lambda x: {
                 "weight": 4,
                 "color": "#00b4d8",
-                "fillOpacity": 0.3
+                "fillOpacity": 0.25
             }
         ).add_to(m)
 
         # ------------------- Kaart Tonen ------------------------
         st_folium(m, width=900, height=650)
 
-        st.markdown(
-            "<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>",
-            unsafe_allow_html=True
-        )
-
+        st.markdown("<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>", unsafe_allow_html=True)
         
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
