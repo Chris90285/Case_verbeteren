@@ -21,7 +21,8 @@ import io
 import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_option_menu import option_menu
-
+import geopandas as gpd
+from shapely.geometry import Point, box
 # ------------------- Dark Mode Styling ----------------
 # ------------------------------------------------------
 st.markdown("""
@@ -206,7 +207,6 @@ else:
             selected_page = page_mapping[selected_clean_page]
 
         st.markdown("---")
-        st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
         st.markdown("---")
         st.write("Voor het laatst geüpdatet op:")
         st.write(f"*{vandaag}*")
@@ -438,7 +438,161 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-        st.write('hey')
+
+        import geopandas as gpd
+        import requests
+        from shapely.geometry import Point, box
+
+        # ---------- Laad Nederlandse provincies van GitHub ----------
+        @st.cache_data(ttl=86400)
+        def load_prov_geojson():
+            """Laadt provinciegrenzen direct van GitHub als GeoDataFrame."""
+            url = "https://raw.githubusercontent.com/martijnvanvliet/nl_provincies/master/nl_provincies.json"
+            try:
+                data = requests.get(url).json()
+                gdf = gpd.GeoDataFrame.from_features(data["features"])
+                return gdf
+            except Exception as e:
+                st.error(f"Fout bij het laden van provinciegrenzen: {e}")
+                return None
+
+        prov_gdf = load_prov_geojson()
+
+        # ---------- Hulpfuncties voor de nieuwe pagina ----------
+
+        def filter_points_in_bounds(df_points: pd.DataFrame, bounds: dict) -> pd.DataFrame:
+            """Filtert rijen op basis van kaart bounds van st_folium (southWest/northEast)."""
+            try:
+                min_lat = bounds["southWest"]["lat"]
+                min_lng = bounds["southWest"]["lng"]
+                max_lat = bounds["northEast"]["lat"]
+                max_lng = bounds["northEast"]["lng"]
+                subset = df_points[
+                    (df_points["AddressInfo.Latitude"].between(min_lat, max_lat)) &
+                    (df_points["AddressInfo.Longitude"].between(min_lng, max_lng))
+                ]
+                return subset
+            except Exception:
+                return pd.DataFrame()
+
+        # ---------- Nieuwe pagina inhoud ----------
+        st.markdown("### Kaart (Nieuwe weergave) & Info-paneel")
+        st.markdown("---")
+
+        # Parameters & performance-opties
+        st.info("Let op: de OpenChargeMap API levert maximaal 5000 punten — de kaart kan traag zijn als je alles met popups rendert.")
+        col_left, col_right = st.columns([2.5, 1])
+
+        with col_left:
+            st.markdown("**Kaart opties**")
+            provincie_keuze = st.selectbox("📍 Kies een provincie (voor initieel center)", list(provincies.keys()), index=0)
+            center_lat, center_lon, _ = provincies[provincie_keuze]
+
+            kaart_zoom = st.slider("Zoomniveau start", min_value=6, max_value=13, value=8 if provincie_keuze=="Heel Nederland" else 10)
+            snelmodus = st.checkbox("Snelmodus: laad alle punten zonder popups (aanbevolen bij veel punten)", value=True)
+            max_popup_points = st.number_input("Max punten met popup (indien niet snelmodus)", min_value=50, max_value=1000, value=300, step=50)
+
+            # Laad (cached) landelijke dataset — dit kan tot 5000 rijen bevatten
+            with st.spinner("Data laden (landelijk)..."):
+                df_all = get_all_laadpalen_nederland()
+
+            if df_all is None or len(df_all)==0:
+                st.error("Kon geen laadpalen-data laden van OpenChargeMap.")
+            else:
+                # Maak basis kaart
+                m = folium.Map(location=[center_lat, center_lon], zoom_start=kaart_zoom, tiles="CartoDB positron")
+
+                # Voeg provinciegrenzen toe als GeoJSON aanwezig
+                if prov_gdf is not None:
+                    folium.GeoJson(
+                        prov_gdf.to_json(),
+                        name="Provincies",
+                        style_function=lambda feature: {'fillColor':'transparent','color':'blue','weight':2}
+                    ).add_to(m)
+
+                # Wanneer snelmodus: gebruik FastMarkerCluster (geen popups)
+                if snelmodus:
+                    coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
+                    FastMarkerCluster(data=coords).add_to(m)
+                    st.success(f"Snelmodus actief — {len(coords)} punten toegevoegd zonder popups (clustered).")
+                else:
+                    # Toon maximaal `max_popup_points` punten met popups (sample indien nodig)
+                    sample_n = min(len(df_all), int(max_popup_points))
+                    subset = df_all.sample(n=sample_n, random_state=42).reset_index(drop=True)
+                    marker_cluster = MarkerCluster().add_to(m)
+                    for _, row in subset.iterrows():
+                        lat = row.get("AddressInfo.Latitude")
+                        lon = row.get("AddressInfo.Longitude")
+                        title = row.get("AddressInfo.Title", "Onbekend")
+                        town = row.get("AddressInfo.Town", "")
+                        cost = row.get("UsageCost", "N/B")
+                        power = row.get("PowerKW", row.get("Connections.PowerKW", row.get("Connections[0].PowerKW", "N/B")))
+                        popup_html = f"<b>{title}</b><br>{town}<br>Kosten: {cost}<br>Power: {power} kW"
+                        folium.Marker(location=[lat, lon], popup=folium.Popup(popup_html, max_width=300), icon=folium.Icon(icon='bolt', prefix='fa')).add_to(marker_cluster)
+                    st.success(f"{sample_n} punten met popups geladen (random sample).")
+
+                # Zet kaart in de app en vraag om center/zoom/bounds terug (st_folium)
+                map_response = st_folium(m, width=900, height=650, returned_objects=["center", "zoom", "bounds"]) 
+
+        with col_right:
+            st.markdown("### Info-paneel — geselecteerd gebied / kaartview")
+
+            bounds = None
+            if map_response is not None and map_response.get("bounds"):
+                bounds = map_response.get("bounds")
+
+            if bounds:
+                df_in_view = filter_points_in_bounds(df_all, bounds)
+                st.markdown(f"**Kaart view:** {len(df_in_view)} laadpalen binnen zichtbare kaartgebied")
+
+                if "PowerKW" in df_in_view.columns:
+                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["PowerKW"], errors='coerce')
+                elif "Connections.PowerKW" in df_in_view.columns:
+                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["Connections.PowerKW"], errors='coerce')
+                elif "Connections[0].PowerKW" in df_in_view.columns:
+                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["Connections[0].PowerKW"], errors='coerce')
+                else:
+                    df_in_view["PowerKW_clean"] = np.nan
+
+                def parse_cost(value):
+                    if isinstance(value, str):
+                        if "free" in value.lower() or "gratis" in value.lower():
+                            return 0.0
+                        match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+                        return float(match.group(1)) if match else np.nan
+                    return np.nan
+
+                df_in_view["UsageCostClean"] = df_in_view["UsageCost"].apply(parse_cost)
+
+                aantal = len(df_in_view)
+                gem_power = df_in_view["PowerKW_clean"].mean()
+                gem_kost = df_in_view["UsageCostClean"].mean()
+
+                st.metric("Aantal laadpalen (in view)", value=f"{aantal}")
+                st.metric("Gemiddelde vermogen (kW)", value=f"{gem_power:.1f}" if not np.isnan(gem_power) else "N/B")
+                st.metric("Gemiddelde kosten (€/kWh)", value=f"{gem_kost:.2f}" if not np.isnan(gem_kost) else "N/B")
+
+                if "AddressInfo.Town" in df_in_view.columns:
+                    top_towns = df_in_view["AddressInfo.Town"].value_counts().head(5)
+                    st.write("**Top plaatsen (aantal laadpalen):**")
+                    for town, cnt in top_towns.items():
+                        st.write(f"- {town}: {cnt}")
+
+                if st.checkbox("Toon voorbeeld van laadpalen in view (tabel)"):
+                    small = df_in_view[["ID", "AddressInfo.Title", "AddressInfo.Town", "AddressInfo.AddressLine1", "UsageCost"]].head(100)
+                    st.dataframe(small)
+
+                csv = df_in_view.to_csv(index=False).encode("utf-8")
+                st.download_button("Download gegevens van zichtbare kaart (CSV)", data=csv, file_name="laadpalen_view.csv", mime="text/csv")
+
+            else:
+                st.write("Selecteer een gebied in de kaart (pan/zoom) om detailstatistieken te zien.\nJe kunt ook een provincie kiezen links om te centreren.")
+
+            st.markdown("---")
+            st.markdown("**Snel uitleg van ontwerpkeuzes:**")
+            st.write("- Gebruik FastMarkerCluster voor snelle rendering van duizenden punten (geen popups).\n- Als je popups wilt, laadt de app een gerandomiseerde sample om te voorkomen dat renderen vastloopt.\n- Province GeoJSON wordt direct van GitHub geladen en zorgt voor duidelijke omlijningen.\n- Info-paneel filtert op de huidige kaart weergave (bounds) voor lokale stats en downloadoptie.")
+            st.markdown("---")
+
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":

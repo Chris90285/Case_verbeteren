@@ -11,3 +11,5 @@ streamlit-folium
 scikit-learn
 statsmodels
 streamlit-option-menu
+geopandas
+shapely
