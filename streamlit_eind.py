@@ -443,7 +443,7 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-       # ------------------- Functie om provinciegrenzen te laden --------------------
+        # ------------------- Functie om provinciegrenzen te laden --------------------
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
             """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
@@ -583,7 +583,16 @@ if page == "⚡️ Laadpalen":
         # ------------------- Layout: Kaart + Zijblok ------------------------
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
+        # === TOEGEVOEGD: sessievariabelen voor kaartcenter & highlight (geen andere logica aangepast) ===
+        if "map_center" not in st.session_state:
+            st.session_state["map_center"] = (center_lat, center_lon)
+        if "highlight_id" not in st.session_state:
+            st.session_state["highlight_id"] = None
+
         with col1:
+            # Gebruik sessiecoördinaten als center
+            center_lat, center_lon = st.session_state["map_center"]
+
             m = folium.Map(
                 location=[
                     center_lat,
@@ -675,6 +684,33 @@ if page == "⚡️ Laadpalen":
                         icon=folium.Icon(color="green", icon="bolt", prefix="fa")
                     ).add_to(marker_cluster)
 
+            # === Aangepaste weergave: vervang reguliere markers met highlight-variant (indien geselecteerd) ===
+            # We hebben de originele marker-loop hierboven niet verwijderd; hieronder voegen we een tweede loop toe die de geselecteerde marker rood toont.
+            # Dit zorgt ervoor dat je originele logica ongewijzigd blijft en we alleen óp de kaart een highlight toevoegen.
+            if provincie_keuze != "Heel Nederland" and st.session_state.get("highlight_id") is not None:
+                try:
+                    # Zoek de geselecteerde rij en voeg een rode marker bovenop
+                    selected_row = df_prov[df_prov["ID"] == st.session_state["highlight_id"]]
+                    if not selected_row.empty:
+                        sel = selected_row.iloc[0]
+                        lat_sel, lon_sel = sel["AddressInfo.Latitude"], sel["AddressInfo.Longitude"]
+                        if not (pd.isna(lat_sel) or pd.isna(lon_sel)):
+                            popup_sel = f"""
+                            <b>{sel.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                            {sel.get('AddressInfo.AddressLine1', '')}<br>
+                            {sel.get('AddressInfo.Town', '')}<br>
+                            Kosten: {sel.get('UsageCost', 'N/B')}<br>
+                            Vermogen: {sel.get('PowerKW', 'N/B')} kW
+                            """
+                            folium.Marker(
+                                location=[lat_sel, lon_sel],
+                                popup=folium.Popup(popup_sel, max_width=300),
+                                icon=folium.Icon(color="red", icon="bolt", prefix="fa")
+                            ).add_to(m)
+                except Exception:
+                    # In geval van onverwachte index/kolom issues: geen wijziging in bestaande gedrag
+                    pass
+
             st_data = st_folium(m, width=900, height=650)
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
 
@@ -682,7 +718,7 @@ if page == "⚡️ Laadpalen":
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
-                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde))
+                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde)/kWh)
                 colc1, colc2 = st.columns(2)
                 with colc1:
                     st.metric("Goedkoopste", fmt_cost(goedkoopste))
@@ -695,8 +731,11 @@ if page == "⚡️ Laadpalen":
                         addr = row["AddressInfo.AddressLine1"]
                         town = row.get("AddressInfo.Town", "")
                         lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
-                        link = f"[📍 {addr}, {town}](#?lat={lat}&lon={lon})"
-                        st.markdown(link, unsafe_allow_html=True)
+                        # === TOEGEVOEGD: knop die kaart centreert en highlight activeert ===
+                        if st.button(f"📍 {addr}, {town}", key=f"btn_{i}"):
+                            st.session_state["map_center"] = (lat, lon)
+                            st.session_state["highlight_id"] = row["ID"]
+                            st.rerun()
                 else:
                     st.info("Geen gratis laadpalen met jaarabonnement gevonden in dit gebied.")
 
@@ -712,6 +751,11 @@ if page == "⚡️ Laadpalen":
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+
+
+
+
 
 
 # ------------------- Pagina 2 --------------------------
@@ -913,6 +957,16 @@ elif page == "🚘 Voertuigen":
 
     else:
         st.write('hey')
+
+
+
+
+
+
+
+
+
+
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
