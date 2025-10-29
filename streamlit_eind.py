@@ -573,7 +573,7 @@ if page == "⚡️ Laadpalen":
                 return "N/B"
             if val == 0.0:
                 return "Gratis"
-            return f"€{val:.2f}/kWh"
+            return f"€{val:.2f}"
 
         # ---------------- Zoek gratis laadpalen met jaarabonnement ----------------
         gratis_df = df_prov[df_prov["UsageCost"].astype(str).str.contains("jaarabonnement", case=False, na=False)]
@@ -1096,4 +1096,4 @@ elif page == "📊 Voorspellend model":
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📌 Conclusie":
-    st.write('heyyy dot is de enige pagina ')
+    st.write('hoi ')
