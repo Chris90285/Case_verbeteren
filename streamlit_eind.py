@@ -516,7 +516,7 @@ if page == "⚡️ Laadpalen":
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
         # === NIEUW: zoomniveau op basis van provincie
-        zoom_default = 7 if provincie_keuze == "Heel Nederland" else 9
+        zoom_default = 7 if provincie_keuze == "Heel Nederland" else 8.5
 
         # --- Detecteer wijziging in provincie en reset kaartpositie ---
         if "last_provincie" not in st.session_state:
