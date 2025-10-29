@@ -535,24 +535,26 @@ if page == "⚡️ Laadpalen":
                 }
 
         # ------------------- Grenzen Toevoegen ------------------
-            # Tooltip met Nederlandse provincienaam
-        def tooltip_function(feature):
-            naam = feature["properties"]["Provincie"]
-            # Vertaal eventueel via mapping terug naar Nederlands
-            nederlandse_naam = provincie_mapping.get(naam, naam)
-            return f"<b>Provincie:</b> {nederlandse_naam}"
+        # Automatische detectie van de juiste kolomnaam
+        mogelijke_kolommen = ["Provincie", "PROV_NAAM", "statnaam", "provincie", "naam"]
+        kolom_nl = next((c for c in mogelijke_kolommen if c in gdf.columns), None)
 
-        # GeoJSON toevoegen met tooltip
+        if kolom_nl is None:
+            raise ValueError("Kon geen kolom met provincienamen vinden in het GeoJSON.")
+
+        # Maak een nette Nederlandstalige kolom aan
+        gdf["Provincie_NL"] = gdf[kolom_nl].replace(provincie_mapping)
+
+        # Voeg de kaartlaag toe met tooltip in het Nederlands
         folium.GeoJson(
             gdf,
             name="Provinciegrenzen",
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
-                fields=["Provincie"],
+                fields=["Provincie_NL"],
                 aliases=["Provincie:"],
                 labels=False,
-                sticky=True,
-                localize=True
+                sticky=True
             ),
             highlight_function=lambda x: {
                 "weight": 4,
@@ -560,7 +562,6 @@ if page == "⚡️ Laadpalen":
                 "fillOpacity": 0.3
             }
         ).add_to(m)
-
 
         # ------------------- Kaart Tonen ------------------------
         st_folium(m, width=900, height=650)
