@@ -584,27 +584,11 @@ if page == "⚡️ Laadpalen":
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
-            # ===== Dynamische centrering van de kaart =====
-            zoom_level = 7 if provincie_keuze == "Heel Nederland" else 9
-
-            # Bereken automatisch een longitude-verschuiving zodat de kaart visueel beter gecentreerd is
-            # (de kaart zit links in het scherm omdat er een infoblok naast staat)
-            ratio = 2.3 / (2.3 + 1.7)  # huidige col1:col2 verhouding = 0.575
-            basis_shift = 2.0 * (0.5 - ratio)  # negatieve waarde omdat de kaart minder breed is dan het scherm
-
-            # Pas verschuiving aan afhankelijk van zoomniveau
-            if provincie_keuze == "Heel Nederland":
-                lon_shift = 2.1 * abs(basis_shift)   # grotere correctie bij laag zoomniveau
-            else:
-                lon_shift = 1.2 * abs(basis_shift)   # kleinere correctie bij provincies
-
-            # Bouw de kaart met gecorrigeerde longitude
             m = folium.Map(
-                location=[center_lat, center_lon + lon_shift],
-                zoom_start=zoom_level,
+                location=[center_lat, center_lon+4.0],
+                zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
                 tiles="OpenStreetMap"
             )
-
 
             def style_function(feature):
                 naam = feature["properties"].get("Provincie_NL", "Onbekend")
