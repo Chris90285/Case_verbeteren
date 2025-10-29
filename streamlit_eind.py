@@ -454,6 +454,8 @@ if page == "⚡️ Laadpalen":
             if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
                 gdf = gdf.to_crs(epsg=4326)
             return gdf
+
+
         # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
@@ -536,32 +538,29 @@ if page == "⚡️ Laadpalen":
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
                 if match:
                     val = float(match.group(1))
-                    # filter foutieve sessieprijzen zoals "40 euro per sessie"
-                    if val > 2.0:
+                    if val > 2.0:  # filter foutieve sessieprijzen
                         return np.nan
                     return val
             return np.nan
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
 
-        # --- Providerinformatie  ---
-        def extract_operator_name(op):
-            if isinstance(op, dict):
-                return op.get("Title", np.nan)
-            elif isinstance(op, str):
-                try:
-                    j = json.loads(op)
-                    return j.get("Title", np.nan)
-                except Exception:
-                    return op if len(op) < 60 else np.nan
-            return np.nan
+        # --- Providerinformatie fix ---
+        def extract_operator_title(df):
+            possible_cols = [
+                "OperatorInfo.Title",
+                "OperatorInfo.title",
+                "Operator.Title",
+                "Operator.Title.Text",
+            ]
+            for col in possible_cols:
+                if col in df.columns:
+                    return df[col]
+            if "OperatorInfo" in df.columns:
+                return df["OperatorInfo"].apply(lambda x: x.get("Title") if isinstance(x, dict) else np.nan)
+            return pd.Series(np.nan, index=df.index)
 
-        if "OperatorInfo.Title" in df_all.columns:
-            df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
-        elif "OperatorInfo" in df_all.columns:
-            df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
-        else:
-            df_all["OperatorTitle"] = np.nan
+        df_all["OperatorTitle"] = extract_operator_title(df_all)
 
         # ---------------- Filter per provincie -------------------
         if provincie_keuze != "Heel Nederland":
@@ -569,9 +568,7 @@ if page == "⚡️ Laadpalen":
         else:
             df_prov = df_all.copy()
 
-        # ---------------- Koppeling met data uit eerdere grafiek ----------------
-        # Stel dat jouw eerste kaart de variabele 'df_filtered' gebruikt (al gefilterd)
-        # Gebruik die dan hier zodat alle cijfers overeenkomen:
+        # ---------------- Koppeling met eerdere grafiek (optioneel) ----------------
         try:
             if "df_filtered" in locals() and not df_filtered.empty:
                 df_prov = df_filtered.copy()
@@ -598,15 +595,15 @@ if page == "⚡️ Laadpalen":
 
         with col1:
             # ------------------- Kaart Maken ------------------------
-            m = folium.Map(location=[center_lat, center_lon],
-                        zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
-                        tiles="OpenStreetMap")
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
+                tiles="OpenStreetMap"
+            )
 
-            # 🎨 Stijl-functie voor provincies
             def style_function(feature):
                 naam = feature["properties"].get("Provincie_NL", "Onbekend")
                 base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
-
                 if provincie_keuze == "Heel Nederland":
                     return base_style
                 elif naam == provincie_keuze:
@@ -659,9 +656,16 @@ if page == "⚡️ Laadpalen":
 
                 st.markdown("#### Providers")
                 if not provider_counts.empty:
-                    fig = px.bar(provider_counts, x="Aantal", y="Provider",
-                                orientation="h", height=250,
-                                title="", color="Aantal", color_continuous_scale="blues")
+                    fig = px.bar(
+                        provider_counts,
+                        x="Aantal",
+                        y="Provider",
+                        orientation="h",
+                        height=250,
+                        title="",
+                        color="Aantal",
+                        color_continuous_scale="blues"
+                    )
                     fig.update_layout(yaxis_title="", xaxis_title="Aantal laadpunten", coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
