@@ -576,7 +576,20 @@ if page == "⚡️ Laadpalen":
         provider_counts.columns = ["Provider", "Aantal"]
 
         # ------------------- Layout: Kaart + Zijblok ------------------------
-        col1, col2 = st.columns([2.5, 1.2], gap="large")
+        col1, col2 = st.columns([3.5, 1.5], gap="large")
+
+        st.markdown(
+    """
+    <style>
+    /* Verschuif de kaartkolom iets naar links */
+    [data-testid="column"]:first-child {
+        margin-left: -60px;  /* schuif meer of minder afhankelijk van je scherm */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
         with col1:
             # ------------------- Kaart Maken ------------------------
