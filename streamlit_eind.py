@@ -515,8 +515,26 @@ if page == "⚡️ Laadpalen":
         provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-        # === NIEUW: zoomniveau
-        st.session_state["zoom_level"] = 7 if provincie_keuze == "Heel Nederland" else 9
+        # === NIEUW: zoomniveau op basis van provincie
+        zoom_default = 7 if provincie_keuze == "Heel Nederland" else 9
+
+        # --- Detecteer wijziging in provincie en reset kaartpositie ---
+        if "last_provincie" not in st.session_state:
+            st.session_state["last_provincie"] = provincie_keuze
+
+        if "map_center" not in st.session_state:
+            st.session_state["map_center"] = (center_lat, center_lon)
+
+        if "zoom_level" not in st.session_state:
+            st.session_state["zoom_level"] = zoom_default
+
+        # Als gebruiker een andere provincie kiest → reset center, zoom en highlight
+        if provincie_keuze != st.session_state["last_provincie"]:
+            st.session_state["map_center"] = (center_lat, center_lon)
+            st.session_state["zoom_level"] = zoom_default
+            st.session_state["highlight_id"] = None
+            st.session_state["last_provincie"] = provincie_keuze
+
 
         # ------------------- Data Ophalen ------------------------
         with st.spinner(f"🔌 Laadpalen laden voor {provincie_keuze}..."):
@@ -605,11 +623,16 @@ if page == "⚡️ Laadpalen":
             if provincie_keuze == "Heel Nederland":
                 highlight_function = lambda x: {"fillColor": "#4b4b4b", "fillOpacity": 0.6, "color": "#cc0000", "weight": 3}
 
+            # --- Gebruik gecorrigeerde center-positie (met offset) ---
+            lat_center, lon_center = st.session_state["map_center"]
+            offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
+
             m = folium.Map(
-                location=[center_lat, center_lon + (3.0 if provincie_keuze == "Heel Nederland" else 0.8)],
+                location=[lat_center, lon_center + offset],
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
+
 
             folium.GeoJson(
                 gdf,
