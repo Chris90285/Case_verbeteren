@@ -652,12 +652,14 @@ if page == "⚡️ Laadpalen":
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
-                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde))
+                # Metrics met duidelijke labels en kortere waarden
+                st.metric("Gemiddelde kosten (€/kWh)", fmt_cost(gemiddelde).replace("/kWh", ""))
                 colc1, colc2 = st.columns(2)
                 with colc1:
-                    st.metric("Goedkoopste", fmt_cost(goedkoopste))
+                    st.metric("Goedkoopste (€/kWh)", fmt_cost(goedkoopste).replace("/kWh", ""))
                 with colc2:
-                    st.metric("Duurste", fmt_cost(duurste))
+                    st.metric("Duurste (€/kWh)", fmt_cost(duurste).replace("/kWh", ""))
+
 
                 st.markdown("#### Providers")
                 if not provider_counts.empty:
