@@ -443,7 +443,7 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-    # ------------------- Functie om provinciegrenzen te laden --------------------
+        # ------------------- Functie om provinciegrenzen te laden --------------------
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
             """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
@@ -454,7 +454,6 @@ if page == "⚡️ Laadpalen":
             if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
                 gdf = gdf.to_crs(epsg=4326)
             return gdf
-
         # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
@@ -537,6 +536,7 @@ if page == "⚡️ Laadpalen":
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
                 if match:
                     val = float(match.group(1))
+                    # filter foutieve sessieprijzen zoals "40 euro per sessie"
                     if val > 2.0:
                         return np.nan
                     return val
@@ -544,7 +544,7 @@ if page == "⚡️ Laadpalen":
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
 
-        # --- Providerinformatie ---
+        # --- Providerinformatie  ---
         def extract_operator_name(op):
             if isinstance(op, dict):
                 return op.get("Title", np.nan)
@@ -556,18 +556,10 @@ if page == "⚡️ Laadpalen":
                     return op if len(op) < 60 else np.nan
             return np.nan
 
-        # Controleer mogelijke providerkolommen
-        mogelijke_providerkolommen = ["OperatorInfo.Title", "DataProvider.Title", "OperatorInfo", "Provider"]
-        bestaande_kolommen = [c for c in mogelijke_providerkolommen if c in df_all.columns]
-
-        if "OperatorInfo.Title" in bestaande_kolommen:
+        if "OperatorInfo.Title" in df_all.columns:
             df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
-        elif "DataProvider.Title" in bestaande_kolommen:
-            df_all["OperatorTitle"] = df_all["DataProvider.Title"]
-        elif "OperatorInfo" in bestaande_kolommen:
+        elif "OperatorInfo" in df_all.columns:
             df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
-        elif "Provider" in bestaande_kolommen:
-            df_all["OperatorTitle"] = df_all["Provider"]
         else:
             df_all["OperatorTitle"] = np.nan
 
@@ -577,6 +569,9 @@ if page == "⚡️ Laadpalen":
         else:
             df_prov = df_all.copy()
 
+        # ---------------- Koppeling met data uit eerdere grafiek ----------------
+        # Stel dat jouw eerste kaart de variabele 'df_filtered' gebruikt (al gefilterd)
+        # Gebruik die dan hier zodat alle cijfers overeenkomen:
         try:
             if "df_filtered" in locals() and not df_filtered.empty:
                 df_prov = df_filtered.copy()
@@ -588,19 +583,18 @@ if page == "⚡️ Laadpalen":
         goedkoopste = df_prov["UsageCostClean"].min()
         duurste = df_prov["UsageCostClean"].max()
 
-        # ---------------- Provider telling ----------------
+        # Top 5 providers
         provider_counts = (
             df_prov["OperatorTitle"]
             .dropna()
             .value_counts()
+            .head(5)
             .reset_index()
-            .rename(columns={"index": "Provider", "OperatorTitle": "Aantal"})
         )
-
-        provider_counts = provider_counts.sort_values("Aantal", ascending=True).head(10)
+        provider_counts.columns = ["Provider", "Aantal"]
 
         # ------------------- Layout: Kaart + Zijblok ------------------------
-        col1, col2 = st.columns([2.5, 1.5], gap="large")  # rechterblok iets smaller
+        col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
             # ------------------- Kaart Maken ------------------------
@@ -608,6 +602,7 @@ if page == "⚡️ Laadpalen":
                         zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
                         tiles="OpenStreetMap")
 
+            # 🎨 Stijl-functie voor provincies
             def style_function(feature):
                 naam = feature["properties"].get("Provincie_NL", "Onbekend")
                 base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
@@ -656,7 +651,7 @@ if page == "⚡️ Laadpalen":
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
                 st.metric("Gemiddelde kosten", f"€{gemiddelde:.2f}/kWh" if not np.isnan(gemiddelde) else "N/B")
-                colc1 = st.columns(1)
+                colc1= st.columns(1)
                 with colc1:
                     st.metric("Duurste", f"€{duurste:.2f}/kWh" if not np.isnan(duurste) else "N/B")
 
