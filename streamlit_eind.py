@@ -584,11 +584,12 @@ if page == "⚡️ Laadpalen":
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
+            lon_correctie = 0.6 if provincie_keuze == "Heel Nederland" else 0.4
             m = folium.Map(
-                location=[center_lat, center_lon],
+                location=[center_lat, center_lon + lon_correctie],
                 zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
                 tiles="OpenStreetMap"
-            )
+)
 
             def style_function(feature):
                 naam = feature["properties"].get("Provincie_NL", "Onbekend")
