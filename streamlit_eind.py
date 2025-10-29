@@ -718,7 +718,7 @@ if page == "⚡️ Laadpalen":
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
-                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde)/kWh)
+                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde)'/kWh')
                 colc1, colc2 = st.columns(2)
                 with colc1:
                     st.metric("Goedkoopste", fmt_cost(goedkoopste))
