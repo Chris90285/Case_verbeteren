@@ -441,154 +441,42 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-        # ---------- Provincie-coördinaten ----------
-        provincies = {
-            "Heel Nederland": [52.1, 5.3, 200],
-            "Groningen": [53.2194, 6.5665, 60],
-            "Friesland": [53.1642, 5.7818, 60],
-            "Drenthe": [52.9476, 6.6231, 60],
-            "Overijssel": [52.4380, 6.5010, 60],
-            "Flevoland": [52.5270, 5.5953, 60],
-            "Gelderland": [52.0452, 5.8712, 60],
-            "Utrecht": [52.0907, 5.1214, 60],
-            "Noord-Holland": [52.5206, 4.7885, 60],
-            "Zuid-Holland": [52.0116, 4.3571, 60],
-            "Zeeland": [51.4940, 3.8497, 60],
-            "Noord-Brabant": [51.5730, 5.0670, 60],
-            "Limburg": [51.2490, 5.9330, 60],
-        }
-
-        # ---------- Laad provinciegrenzen van GitHub ----------
         @st.cache_data(ttl=86400)
-        def load_prov_geojson():
-            url = "https://raw.githubusercontent.com/martijnvanvliet/nl_provincies/master/nl_provincies.json"
-            try:
-                r = requests.get(url)
-                data = json.loads(r.text)
-                gdf = gpd.GeoDataFrame.from_features(data["features"])
-                return gdf
-            except Exception as e:
-                st.error(f"Fout bij het laden van provinciegrenzen: {e}")
-                return None
+        def load_provincie_grenzen():
+            """Laadt de provinciegrenzen van Nederland (GeoJSON)."""
+            url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
+            gdf = gpd.read_file(url)
+            if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
+                gdf = gdf.to_crs(epsg=4326)
+            return gdf
 
-        prov_gdf = load_prov_geojson()
-
-        # ---------- Hulpfuncties ----------
-
-        def filter_points_in_bounds(df_points: pd.DataFrame, bounds: dict) -> pd.DataFrame:
-            try:
-                min_lat = bounds["southWest"]["lat"]
-                min_lng = bounds["southWest"]["lng"]
-                max_lat = bounds["northEast"]["lat"]
-                max_lng = bounds["northEast"]["lng"]
-                subset = df_points[
-                    (df_points["AddressInfo.Latitude"].between(min_lat, max_lat)) &
-                    (df_points["AddressInfo.Longitude"].between(min_lng, max_lng))
-                ]
-                return subset
-            except Exception:
-                return pd.DataFrame()
-
-        # ---------- Nieuwe pagina inhoud ----------
-        st.markdown("### Kaart (Nieuwe weergave) & Info-paneel")
+        # ---------------- KAART PROVINCIEGRENZEN -----------------
+        st.markdown("## 🗺️ Kaart van Nederland – Provinciegrenzen")
         st.markdown("---")
 
-        col_left, col_right = st.columns([2.5, 1])
+        with st.spinner("Provinciegrenzen laden..."):
+            gdf = load_provincie_grenzen()
 
-        with col_left:
-            st.markdown("**Kaart opties**")
-            provincie_keuze = st.selectbox("📍 Kies een provincie (voor initieel center)", list(provincies.keys()), index=0)
-            center_lat, center_lon, _ = provincies[provincie_keuze]
+        # Maak folium kaart
+        m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="OpenStreetMap")
 
-            kaart_zoom = st.slider("Zoomniveau start", min_value=6, max_value=13, value=8 if provincie_keuze=="Heel Nederland" else 10)
-            snelmodus = st.checkbox("Snelmodus: laad alle punten zonder popups", value=True)
-            max_popup_points = st.number_input("Max punten met popup (indien niet snelmodus)", min_value=50, max_value=1000, value=300, step=50)
+        # Voeg de provinciegrenzen toe
+        folium.GeoJson(
+            gdf,
+            name="Provinciegrenzen",
+            style_function=lambda feature: {
+                "fillColor": "#00000000",   # transparante vulling
+                "color": "#00b4d8",         # turquoise lijnkleur
+                "weight": 2,
+                "dashArray": "5, 5"
+            },
+            tooltip=folium.GeoJsonTooltip(fields=["provincie"], aliases=["Provincie:"])
+        ).add_to(m)
 
-            # Laad (cached) landelijke dataset
-            with st.spinner("Data laden (landelijk)..."):
-                df_all = get_all_laadpalen_nederland()
+        st_folium(m, width=900, height=650)
+        st.markdown("<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>", unsafe_allow_html=True)
 
-            if df_all is None or len(df_all)==0:
-                st.error("Kon geen laadpalen-data laden van OpenChargeMap.")
-            else:
-                m = folium.Map(location=[center_lat, center_lon], zoom_start=kaart_zoom, tiles="CartoDB positron")
-
-                if prov_gdf is not None:
-                    folium.GeoJson(
-                        prov_gdf.to_json(),
-                        name="Provincies",
-                        style_function=lambda feature: {'fillColor':'transparent','color':'blue','weight':2}
-                    ).add_to(m)
-
-                if snelmodus:
-                    coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
-                    FastMarkerCluster(data=coords).add_to(m)
-                    st.success(f"Snelmodus actief — {len(coords)} punten toegevoegd zonder popups.")
-                else:
-                    sample_n = min(len(df_all), int(max_popup_points))
-                    subset = df_all.sample(n=sample_n, random_state=42).reset_index(drop=True)
-                    marker_cluster = MarkerCluster().add_to(m)
-                    for _, row in subset.iterrows():
-                        lat = row.get("AddressInfo.Latitude")
-                        lon = row.get("AddressInfo.Longitude")
-                        title = row.get("AddressInfo.Title", "Onbekend")
-                        town = row.get("AddressInfo.Town", "")
-                        cost = row.get("UsageCost", "N/B")
-                        power = row.get("PowerKW", row.get("Connections.PowerKW", row.get("Connections[0].PowerKW", "N/B")))
-                        popup_html = f"<b>{title}</b><br>{town}<br>Kosten: {cost}<br>Power: {power} kW"
-                        folium.Marker(location=[lat, lon], popup=folium.Popup(popup_html, max_width=300), icon=folium.Icon(icon='bolt', prefix='fa')).add_to(marker_cluster)
-                    st.success(f"{sample_n} punten met popups geladen.")
-
-                map_response = st_folium(m, width=900, height=650, returned_objects=["center", "zoom", "bounds"]) 
-
-        with col_right:
-            st.markdown("### Info-paneel — geselecteerd gebied / kaartview")
-
-            bounds = None
-            if map_response is not None and map_response.get("bounds"):
-                bounds = map_response.get("bounds")
-
-            if bounds:
-                df_in_view = filter_points_in_bounds(df_all, bounds)
-                st.markdown(f"**Kaart view:** {len(df_in_view)} laadpalen binnen zichtbare kaartgebied")
-
-                if "PowerKW" in df_in_view.columns:
-                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["PowerKW"], errors='coerce')
-                elif "Connections.PowerKW" in df_in_view.columns:
-                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["Connections.PowerKW"], errors='coerce')
-                elif "Connections[0].PowerKW" in df_in_view.columns:
-                    df_in_view["PowerKW_clean"] = pd.to_numeric(df_in_view["Connections[0].PowerKW"], errors='coerce')
-                else:
-                    df_in_view["PowerKW_clean"] = np.nan
-
-                def parse_cost(value):
-                    if isinstance(value, str):
-                        if "free" in value.lower() or "gratis" in value.lower():
-                            return 0.0
-                        match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
-                        return float(match.group(1)) if match else np.nan
-                    return np.nan
-
-                df_in_view["UsageCostClean"] = df_in_view["UsageCost"].apply(parse_cost)
-
-                st.metric("Aantal laadpalen (in view)", value=f"{len(df_in_view)}")
-                st.metric("Gemiddelde vermogen (kW)", value=f"{df_in_view['PowerKW_clean'].mean():.1f}" if len(df_in_view)>0 else "N/B")
-                st.metric("Gemiddelde kosten (€/kWh)", value=f"{df_in_view['UsageCostClean'].mean():.2f}" if len(df_in_view)>0 else "N/B")
-
-                if "AddressInfo.Town" in df_in_view.columns:
-                    top_towns = df_in_view["AddressInfo.Town"].value_counts().head(5)
-                    st.write("**Top plaatsen (aantal laadpalen):**")
-                    for town, cnt in top_towns.items():
-                        st.write(f"- {town}: {cnt}")
-
-                csv = df_in_view.to_csv(index=False).encode("utf-8")
-                st.download_button("Download gegevens van zichtbare kaart (CSV)", data=csv, file_name="laadpalen_view.csv", mime="text/csv")
-
-            else:
-                st.write("Selecteer een gebied in de kaart (pan/zoom) om detailstatist")
-
-
-
+        
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     if not nieuwe_pagina:
