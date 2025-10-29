@@ -630,7 +630,7 @@ if page == "⚡️ Laadpalen":
             if st.session_state.get("highlight_id") is None:
                 offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
             else:
-                offset = 0.0  # Geen verschuiving bij klik op specifiek laadpunt
+                offset = 0.15  # Geen verschuiving bij klik op specifiek laadpunt
 
             m = folium.Map(
                 location=[lat_center, lon_center + offset],
