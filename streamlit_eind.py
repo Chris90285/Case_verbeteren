@@ -516,7 +516,7 @@ if page == "⚡️ Laadpalen":
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
         # === NIEUW: zoomniveau op basis van provincie
-        zoom_default = 7 if provincie_keuze == "Heel Nederland" else 8.5
+        zoom_default = 7 if provincie_keuze == "Heel Nederland" else 8
 
         # --- Detecteer wijziging in provincie en reset kaartpositie ---
         if "last_provincie" not in st.session_state:
@@ -625,13 +625,19 @@ if page == "⚡️ Laadpalen":
 
             # --- Gebruik gecorrigeerde center-positie (met offset) ---
             lat_center, lon_center = st.session_state["map_center"]
-            offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
+
+            # Offset alleen gebruiken bij standaard provincieweergave
+            if st.session_state.get("highlight_id") is None:
+                offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
+            else:
+                offset = 0.0  # Geen verschuiving bij klik op specifiek laadpunt
 
             m = folium.Map(
                 location=[lat_center, lon_center + offset],
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
+
 
 
             folium.GeoJson(
