@@ -443,7 +443,7 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
-        # ------------------- Functie om provinciegrenzen te laden --------------------
+       # ------------------- Functie om provinciegrenzen te laden --------------------
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
             """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
@@ -454,7 +454,6 @@ if page == "⚡️ Laadpalen":
                 gdf = gdf.to_crs(epsg=4326)
             return gdf
 
-        # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
 
@@ -496,7 +495,6 @@ if page == "⚡️ Laadpalen":
         gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna("Onbekend")
         gdf["Provincie"] = gdf["Provincie_NL"]
 
-        # ------------------- Dropdown Keuze ---------------------
         provincies = {
             "Heel Nederland": [52.1, 5.3, 200],
             "Groningen": [53.2194, 6.5665, 60],
@@ -528,48 +526,45 @@ if page == "⚡️ Laadpalen":
             st.warning("Geen laadpalen gevonden.")
             st.stop()
 
-        # --------------- Verwerk kosten en provider-info ----------
+        # ------------------- Kostenberekening (zelfde als oude pagina) -------------------
         def parse_cost(value):
             if isinstance(value, str):
                 if "free" in value.lower() or "gratis" in value.lower():
                     return 0.0
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
-                if match:
-                    val = float(match.group(1))
-                    if val > 10:  # verwerp sessieprijzen
-                        return np.nan
-                    return val
+                return float(match.group(1)) if match else np.nan
             return np.nan
 
-        df_all["UsageCostClean"] = df_all.get("UsageCost", np.nan).apply(parse_cost)
+        df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+        df_all.loc[(df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2), "UsageCostClean"] = np.nan
 
-        # --- Providerinformatie  ---
-        def extract_operator_name(op):
-            if isinstance(op, dict):
-                return op.get("Title", np.nan)
-            elif isinstance(op, str):
-                try:
-                    j = json.loads(op)
-                    return j.get("Title", np.nan)
-                except Exception:
-                    return op if len(op) < 60 else np.nan
-            return np.nan
+        provincie_mapping = {
+            "Groningen": "Groningen", "Friesland": "Friesland", "Fryslân": "Friesland",
+            "Drenthe": "Drenthe", "Overijssel": "Overijssel", "Flevoland": "Flevoland",
+            "Gelderland": "Gelderland", "Utrecht": "Utrecht",
+            "Noord-Holland": "Noord-Holland", "North Holland": "Noord-Holland",
+            "Zuid-Holland": "Zuid-Holland", "South Holland": "Zuid-Holland",
+            "Zeeland": "Zeeland", "Noord-Brabant": "Noord-Brabant",
+            "North Brabant": "Noord-Brabant", "Limburg": "Limburg"
+        }
 
-        if "OperatorInfo.Title" in df_all.columns:
-            df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
-        elif "OperatorInfo" in df_all.columns:
-            df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
-        else:
-            df_all["OperatorTitle"] = np.nan
+        df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
+        df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
 
-        # ---------------- Filter per provincie -------------------
+        df_agg = (
+            df_all.groupby("Provincie")
+            .agg(Gemiddelde_kosten=("UsageCostClean", "mean"))
+            .reset_index()
+        )
+
+        # ---------------- Filter data per provincie -------------------
         if provincie_keuze != "Heel Nederland":
-            df_prov = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+            df_prov = df_all[df_all["Provincie"] == provincie_keuze]
+            gemiddelde = df_agg.loc[df_agg["Provincie"] == provincie_keuze, "Gemiddelde_kosten"].values[0]
         else:
+            gemiddelde = df_agg["Gemiddelde_kosten"].mean()
             df_prov = df_all.copy()
 
-        # ---------------- Berekeningen ----------------
-        gemiddelde = df_prov["UsageCostClean"].mean()
         goedkoopste = df_prov["UsageCostClean"].min()
         duurste = df_prov["UsageCostClean"].max()
 
@@ -580,28 +575,21 @@ if page == "⚡️ Laadpalen":
                 return "Gratis"
             return f"€{val:.2f}/kWh"
 
-        # ---------------- Top 5 providers ----------------
-        provider_counts = (
-            df_prov["OperatorTitle"]
-            .dropna()
-            .value_counts()
-            .head(5)
-            .reset_index()
-        )
-        provider_counts.columns = ["Provider", "Aantal"]
+        # ---------------- Zoek gratis laadpalen met jaarabonnement ----------------
+        gratis_df = df_prov[df_prov["UsageCost"].astype(str).str.contains("jaarabonnement", case=False, na=False)]
+        gratis_df = gratis_df.dropna(subset=["AddressInfo.AddressLine1", "AddressInfo.Latitude", "AddressInfo.Longitude"])
+        gratis_df = gratis_df.head(10)
 
         # ------------------- Layout: Kaart + Zijblok ------------------------
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
-            # ------------------- Kaart Maken ------------------------
             m = folium.Map(
                 location=[center_lat, center_lon],
                 zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
                 tiles="OpenStreetMap"
             )
 
-            # 🎨 Stijl-functie voor provincies (originele kleuren)
             def style_function(feature):
                 naam = feature["properties"].get("Provincie_NL", "Onbekend")
                 base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
@@ -620,7 +608,7 @@ if page == "⚡️ Laadpalen":
                 tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False)
             ).add_to(m)
 
-            # ------------------- Laadpalen op kaart -------------------
+            # Laadpalen op kaart
             if provincie_keuze == "Heel Nederland":
                 coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
                 coords = [(lat, lon) for lat, lon in coords if not (pd.isna(lat) or pd.isna(lon))]
@@ -636,7 +624,6 @@ if page == "⚡️ Laadpalen":
                     {row.get('AddressInfo.AddressLine1', '')}<br>
                     {row.get('AddressInfo.Town', '')}<br>
                     Kosten: {row.get('UsageCost', 'N/B')}<br>
-                    Provider: {row.get('OperatorTitle', 'Onbekend')}<br>
                     Vermogen: {row.get('PowerKW', 'N/B')} kW
                     """
                     folium.Marker(
@@ -645,7 +632,7 @@ if page == "⚡️ Laadpalen":
                         icon=folium.Icon(color="green", icon="bolt", prefix="fa")
                     ).add_to(marker_cluster)
 
-            st_folium(m, width=900, height=650)
+            st_data = st_folium(m, width=900, height=650)
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
 
         with col2:
@@ -659,15 +646,16 @@ if page == "⚡️ Laadpalen":
                 with colc2:
                     st.metric("Duurste", fmt_cost(duurste))
 
-                st.markdown("#### Providers")
-                if not provider_counts.empty:
-                    fig = px.bar(provider_counts, x="Aantal", y="Provider",
-                                orientation="h", height=250,
-                                title="", color="Aantal", color_continuous_scale="blues")
-                    fig.update_layout(yaxis_title="", xaxis_title="Aantal laadpunten", coloraxis_showscale=False)
-                    st.plotly_chart(fig, use_container_width=True)
+                st.markdown("#### Gratis laadpalen met jaarabonnement")
+                if not gratis_df.empty:
+                    for i, row in gratis_df.iterrows():
+                        addr = row["AddressInfo.AddressLine1"]
+                        town = row.get("AddressInfo.Town", "")
+                        lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
+                        link = f"[📍 {addr}, {town}](#?lat={lat}&lon={lon})"
+                        st.markdown(link, unsafe_allow_html=True)
                 else:
-                    st.info("Geen providerinformatie beschikbaar.")
+                    st.info("Geen gratis laadpalen met jaarabonnement gevonden in dit gebied.")
 
             st.markdown("---")
             st.markdown("#### Legenda Laadpaaldichtheid")
