@@ -210,9 +210,11 @@ else:
             selected_page = page_mapping[selected_clean_page]
 
         st.markdown("---")
-        st.markdown("---")
+
         st.write("Voor het laatst geüpdatet op:")
         st.write(f"*{vandaag}*")
+        st.write("")
+        st.write("")
         st.write("")
         st.write("")
         st.write("")
@@ -521,106 +523,127 @@ if page == "⚡️ Laadpalen":
         provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-        # ------------------- Kaart Maken ------------------------
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=7 if provincie_keuze == "Heel Nederland" else 9, tiles="OpenStreetMap")
-
-        # 🎨 Stijl-functie
-        def style_function(feature):
-            naam = feature["properties"].get("Provincie_NL", "Onbekend")
-
-            # Altijd zwarte grenzen
-            base_style = {
-                "color": "black",
-                "weight": 1.5,
-                "fillOpacity": 0.0,
-                "fillColor": "#00000000"
-            }
-
-            if provincie_keuze == "Heel Nederland":
-                return base_style
-            elif naam == provincie_keuze:
-                return {
-                    "fillColor": "#00000000",
-                    "color": "#b30000",
-                    "weight": 3,
-                    "fillOpacity": 0.0
-                }
-            else:
-                return {
-                    "fillColor": "#2b2b2b",
-                    "color": "black",
-                    "weight": 1.5,
-                    "fillOpacity": 0.5
-                }
-
-        # Hover effect 
-        def highlight_function(feature):
-            naam = feature["properties"].get("Provincie_NL", "")
-            if provincie_keuze == "Heel Nederland":
-                return {
-                    "fillColor": "#4f4f4f",
-                    "fillOpacity": 0.4,
-                    "color": "#b30000",
-                    "weight": 2.5
-                }
-            else:
-                return {
-                    "fillColor": "#2b2b2b",
-                    "fillOpacity": 0.4,
-                    "color": "#b30000",
-                    "weight": 2.5
-                }
-
-        # ------------------- Grenzen Toevoegen ------------------
-        folium.GeoJson(
-            gdf,
-            name="Provinciegrenzen",
-            style_function=style_function,
-            highlight_function=highlight_function,
-            tooltip=folium.GeoJsonTooltip(
-                fields=["Provincie_NL"],
-                aliases=["Provincie:"],
-                labels=False,
-                sticky=True
-            )
-        ).add_to(m)
-
-        # ------------------- Laadpalen Ophalen ------------------
+        # ------------------- Data Ophalen ------------------------
         with st.spinner(f"🔌 Laadpalen laden voor {provincie_keuze}..."):
             df_all = get_all_laadpalen_nederland()
 
+        # --------------- Verwerk kosten en provider-info ----------
+        def parse_cost(value):
+            if isinstance(value, str):
+                if "free" in value.lower() or "gratis" in value.lower():
+                    return 0.0
+                match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+                return float(match.group(1)) if match else np.nan
+            return np.nan
+
+        df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+        df_all["OperatorTitle"] = df_all["OperatorInfo.Title"] if "OperatorInfo.Title" in df_all.columns else df_all.get("OperatorInfo", None)
+
+        if provincie_keuze != "Heel Nederland":
+            df_prov = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+        else:
+            df_prov = df_all.copy()
+
+        # Gemiddelde, min en max kosten
+        gemiddelde = df_prov["UsageCostClean"].mean()
+        goedkoopste = df_prov["UsageCostClean"].min()
+        duurste = df_prov["UsageCostClean"].max()
+
+        # Top 5 providers
+        provider_counts = df_prov["OperatorTitle"].value_counts().head(5).reset_index()
+        provider_counts.columns = ["Provider", "Aantal"]
+
+        # ------------------- Layout: Kaart + Zijblok ------------------------
+        col1, col2 = st.columns([3, 1], gap="large")
+
+        with col1:
+            # ------------------- Kaart Maken ------------------------
+            m = folium.Map(location=[center_lat, center_lon],
+                        zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
+                        tiles="OpenStreetMap")
+
+            # 🎨 Stijl-functie voor provincies
+            def style_function(feature):
+                naam = feature["properties"].get("Provincie_NL", "Onbekend")
+                base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
+
+                if provincie_keuze == "Heel Nederland":
+                    return base_style
+                elif naam == provincie_keuze:
+                    return {"fillColor": "#00000000", "color": "#b30000", "weight": 3, "fillOpacity": 0.0}
+                else:
+                    return {"fillColor": "#2b2b2b", "color": "black", "weight": 1.5, "fillOpacity": 0.5}
+
+            def highlight_function(feature):
+                return {"fillColor": "#4f4f4f", "fillOpacity": 0.4, "color": "#b30000", "weight": 2.5}
+
+            folium.GeoJson(
+                gdf,
+                name="Provinciegrenzen",
+                style_function=style_function,
+                highlight_function=highlight_function,
+                tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False, sticky=True)
+            ).add_to(m)
+
+            # ------------------- Laadpalen op kaart -------------------
             if provincie_keuze == "Heel Nederland":
-                # Toon alle 5000 laadpalen zonder popups (snel)
                 coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
                 FastMarkerCluster(data=coords).add_to(m)
-                st.info("Snelmodus: alle 5000 laadpalen getoond zonder popups voor prestaties.")
             else:
-                # Filter laadpalen binnen gekozen provincie
-                provincie_df = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+                marker_cluster = MarkerCluster().add_to(m)
+                for _, row in df_prov.iterrows():
+                    lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
+                    popup = f"""
+                    <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                    {row.get('AddressInfo.AddressLine1', '')}<br>
+                    {row.get('AddressInfo.Town', '')}<br>
+                    Kosten: {row.get('UsageCost', 'N/B')}<br>
+                    Vermogen: {row.get('PowerKW', 'N/B')} kW
+                    """
+                    icon = folium.Icon(color="green", icon="bolt", prefix="fa")
+                    folium.Marker(location=[lat, lon],
+                                popup=folium.Popup(popup, max_width=300),
+                                icon=icon).add_to(marker_cluster)
 
-                if len(provincie_df) == 0:
-                    st.warning(f"Geen laadpalen gevonden voor {provincie_keuze}.")
+            st_folium(m, width=850, height=650)
+            st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"### ℹ️ Informatie – {provincie_keuze}")
+            st.markdown("---")
+
+            if df_prov.empty:
+                st.warning("Geen laadpaaldata gevonden voor dit gebied.")
+            else:
+                st.metric("Gemiddelde kosten", f"€{gemiddelde:.2f}/kWh" if not np.isnan(gemiddelde) else "N/B")
+                colc1, colc2 = st.columns(2)
+                with colc1:
+                    st.metric("Goedkoopste", f"€{goedkoopste:.2f}/kWh" if not np.isnan(goedkoopste) else "N/B")
+                with colc2:
+                    st.metric("Duurste", f"€{duurste:.2f}/kWh" if not np.isnan(duurste) else "N/B")
+
+                st.markdown("#### 🔌 Top 5 Providers")
+                if not provider_counts.empty:
+                    fig = px.bar(provider_counts, x="Aantal", y="Provider",
+                                orientation="h", height=250,
+                                title="", color="Aantal", color_continuous_scale="blues")
+                    fig.update_layout(yaxis_title="", xaxis_title="Aantal laadpunten", coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.success(f"{len(provincie_df)} laadpalen gevonden voor {provincie_keuze}.")
-                    marker_cluster = MarkerCluster().add_to(m)
-                    for _, row in provincie_df.iterrows():
-                        lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
-                        popup = f"""
-                        <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
-                        {row.get('AddressInfo.AddressLine1', '')}<br>
-                        {row.get('AddressInfo.Town', '')}<br>
-                        Kosten: {row.get('UsageCost', 'N/B')}<br>
-                        Vermogen: {row.get('PowerKW', 'N/B')} kW
-                        """
-                        icon = folium.Icon(color="green", icon="bolt", prefix="fa")
-                        folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
+                    st.info("Geen providerinformatie beschikbaar.")
 
-        # ------------------- Kaart Tonen ------------------------
-        st_folium(m, width=900, height=650)
-
-        st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
-
-
+            st.markdown("---")
+            st.markdown("#### 🗺️ Legenda Laadpaaldichtheid")
+            st.markdown("""
+            <div style='padding: 10px; background-color: #1E1E1E; border-radius: 10px;'>
+                <div style='display: flex; flex-direction: column; gap: 4px;'>
+                    <div><span style='background-color: green; width: 20px; height: 10px; display: inline-block; margin-right: 8px;'></span>Weinig laadpalen</div>
+                    <div><span style='background-color: yellow; width: 20px; height: 10px; display: inline-block; margin-right: 8px;'></span>Middelmatig aantal</div>
+                    <div><span style='background-color: orange; width: 20px; height: 10px; display: inline-block; margin-right: 8px;'></span>Veel laadpalen</div>
+                    <div><span style='background-color: red; width: 20px; height: 10px; display: inline-block; margin-right: 8px;'></span>Zeer veel laadpalen</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     if not nieuwe_pagina:
