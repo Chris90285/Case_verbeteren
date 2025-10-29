@@ -474,13 +474,10 @@ if page == "⚡️ Laadpalen":
 
         code_col = None
         for c in gdf.columns:
-            try:
-                sample_vals = gdf[c].astype(str).dropna().unique()[:10]
-                if any(re.match(r"^PV\d{1,3}$", str(v)) for v in sample_vals):
-                    code_col = c
-                    break
-            except Exception:
-                continue
+            sample_vals = gdf[c].astype(str).dropna().unique()[:10]
+            if any(re.match(r"^PV\d{1,3}$", str(v)) for v in sample_vals):
+                code_col = c
+                break
 
         if code_col is not None:
             gdf["ProvCode"] = gdf[code_col].astype(str)
@@ -519,106 +516,51 @@ if page == "⚡️ Laadpalen":
         provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
         center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-        # ------------------- Data Ophalen (met checks) ------------------------
+        # ------------------- Data Ophalen ------------------------
         with st.spinner(f"🔌 Laadpalen laden voor {provincie_keuze}..."):
             try:
                 df_all = get_all_laadpalen_nederland()
-                if df_all is None:
-                    st.error("Kon geen data ophalen: get_all_laadpalen_nederland() gaf None terug.")
-                    df_all = pd.DataFrame()
             except Exception as e:
-                st.error(f"Fout bij ophalen laadpalen: {e}")
+                st.error(f"Kon laadpaaldata niet ophalen: {e}")
                 df_all = pd.DataFrame()
 
-        # Als df_all leeg is, toon melding en maak lege placeholders
         if df_all.empty:
-            st.warning("Geen laadpaaldata beschikbaar of ophalen is mislukt.")
-            # laat kaart zien zonder markers maar met provincies
-            m_empty = folium.Map(location=[center_lat, center_lon], zoom_start=7 if provincie_keuze == "Heel Nederland" else 9, tiles="OpenStreetMap")
-            folium.GeoJson(gdf, name="Provinciegrenzen").add_to(m_empty)
-            st_folium(m_empty, width=900, height=650)
-            st.stop()  # stopt verder uitvoeren van deze pagina
+            st.warning("Geen laadpalen gevonden.")
+            st.stop()
 
-        # ---------------- Verwerk kosten (robust) ----------------
+        # --------------- Verwerk kosten en provider-info ----------
         def parse_cost(value):
-            """Converteer UsageCost naar een redelijke numeric (€/kWh) indien mogelijk."""
             if isinstance(value, str):
-                text = value.lower()
-                if "free" in text or "gratis" in text:
+                if "free" in value.lower() or "gratis" in value.lower():
                     return 0.0
-                # zoek het eerste getal (bijv. "€0.64/kWh" of "0.64 €/kWh" of "40 euro per sessie")
-                match = re.search(r"(\d+[\.,]?\d*)", text.replace(",", "."))
+                match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
                 if match:
-                    try:
-                        val = float(match.group(1))
-                    except Exception:
-                        return np.nan
-                    # verwerp duidelijk onrealistische eenmalige sessieprijzen boven €10
-                    if val > 10:
+                    val = float(match.group(1))
+                    if val > 10:  # verwerp sessieprijzen
                         return np.nan
                     return val
-            # soms staat het als float/int al
-            if isinstance(value, (int, float)) and not np.isnan(value):
-                if 0 <= value <= 10:
-                    return float(value)
             return np.nan
 
-        # Zorg dat de kolom 'UsageCost' aanwezig is (anders maak lege kolom)
-        if "UsageCost" not in df_all.columns:
-            df_all["UsageCost"] = np.nan
+        df_all["UsageCostClean"] = df_all.get("UsageCost", np.nan).apply(parse_cost)
 
-        df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+        # --- Providerinformatie  ---
+        def extract_operator_name(op):
+            if isinstance(op, dict):
+                return op.get("Title", np.nan)
+            elif isinstance(op, str):
+                try:
+                    j = json.loads(op)
+                    return j.get("Title", np.nan)
+                except Exception:
+                    return op if len(op) < 60 else np.nan
+            return np.nan
 
-        # ---------------- Providerinformatie: robuuste extractie ----------------
-        def extract_operator_title_series(df):
-            """
-            Retourneer een pandas Series met providernamen.
-            Probeert meerdere mogelijke kolomnamen en structuren.
-            """
-            possible_cols = [
-                "OperatorInfo.Title", "OperatorInfo.title",
-                "Operator.Title", "Operator.Title.Text", "OperatorInfoTitle"
-            ]
-            # direct kolom teruggeven als aanwezig
-            for col in possible_cols:
-                if col in df.columns:
-                    return df[col].astype(str).replace("nan", np.nan)
-
-            # soms is OperatorInfo een dict/object in de cel
-            if "OperatorInfo" in df.columns:
-                def _op_title(x):
-                    if isinstance(x, dict):
-                        return x.get("Title") or x.get("title") or np.nan
-                    # als het een string-JSON is
-                    if isinstance(x, str):
-                        try:
-                            j = json.loads(x)
-                            return j.get("Title") or j.get("title") or np.nan
-                        except Exception:
-                            return np.nan
-                    return np.nan
-                return df["OperatorInfo"].apply(_op_title)
-
-            # fallback: kijk in Connections (soms provider info daarin)
-            if "Connections" in df.columns:
-                def _from_connections(x):
-                    # connections kan een lijst van dicts of een string zijn
-                    if isinstance(x, list) and len(x) > 0 and isinstance(x[0], dict):
-                        return x[0].get("Operator", x[0].get("OperatorID", np.nan))
-                    if isinstance(x, str):
-                        try:
-                            j = json.loads(x)
-                            if isinstance(j, list) and len(j) > 0 and isinstance(j[0], dict):
-                                return j[0].get("Operator") or j[0].get("OperatorID") or np.nan
-                        except Exception:
-                            return np.nan
-                    return np.nan
-                return df["Connections"].apply(_from_connections)
-
-            # als niets gevonden, return lege series
-            return pd.Series(np.nan, index=df.index)
-
-        df_all["OperatorTitle"] = extract_operator_title_series(df_all)
+        if "OperatorInfo.Title" in df_all.columns:
+            df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
+        elif "OperatorInfo" in df_all.columns:
+            df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
+        else:
+            df_all["OperatorTitle"] = np.nan
 
         # ---------------- Filter per provincie -------------------
         if provincie_keuze != "Heel Nederland":
@@ -626,67 +568,77 @@ if page == "⚡️ Laadpalen":
         else:
             df_prov = df_all.copy()
 
-        # Optionele koppeling met eerder filter (als je die gebruikt)
-        try:
-            if "df_filtered" in locals() and isinstance(df_filtered, pd.DataFrame) and not df_filtered.empty:
-                df_prov = df_filtered.copy()
-        except Exception:
-            pass
-
-        # ---------------- Berekeningen: gemiddelde / min / max ----------------
+        # ---------------- Berekeningen ----------------
         gemiddelde = df_prov["UsageCostClean"].mean()
         goedkoopste = df_prov["UsageCostClean"].min()
         duurste = df_prov["UsageCostClean"].max()
 
-        # format safe values (voorkom onrealistische rounding)
-        def fmt_euro(val):
-            return f"€{val:.2f}/kWh" if pd.notna(val) else "N/B"
+        def fmt_cost(val):
+            if pd.isna(val):
+                return "N/B"
+            if val == 0.0:
+                return "Gratis"
+            return f"€{val:.2f}/kWh"
 
-        # ---------------- Top providers (veilig) ----------------
-        provider_counts = pd.Series(dtype="int")
-        if "OperatorTitle" in df_prov.columns:
-            provider_counts = df_prov["OperatorTitle"].dropna().value_counts().head(5).reset_index()
-            provider_counts.columns = ["Provider", "Aantal"]
-        else:
-            provider_counts = pd.DataFrame(columns=["Provider", "Aantal"])
+        # ---------------- Top 5 providers ----------------
+        provider_counts = (
+            df_prov["OperatorTitle"]
+            .dropna()
+            .value_counts()
+            .head(5)
+            .reset_index()
+        )
+        provider_counts.columns = ["Provider", "Aantal"]
 
         # ------------------- Layout: Kaart + Zijblok ------------------------
         col1, col2 = st.columns([2.3, 1.7], gap="large")
 
         with col1:
-            # Maak kaart en voeg provinciegrenzen toe
-            m = folium.Map(location=[center_lat, center_lon],
-                        zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
-                        tiles="OpenStreetMap")
+            # ------------------- Kaart Maken ------------------------
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=7 if provincie_keuze == "Heel Nederland" else 9,
+                tiles="OpenStreetMap"
+            )
+
+            # 🎨 Stijl-functie voor provincies (originele kleuren)
+            def style_function(feature):
+                naam = feature["properties"].get("Provincie_NL", "Onbekend")
+                base_style = {"color": "black", "weight": 1.5, "fillOpacity": 0.0, "fillColor": "#00000000"}
+
+                if provincie_keuze == "Heel Nederland":
+                    return base_style
+                elif naam == provincie_keuze:
+                    return {"fillColor": "#00000000", "color": "#b30000", "weight": 3, "fillOpacity": 0.0}
+                else:
+                    return {"fillColor": "#2b2b2b", "color": "black", "weight": 1.5, "fillOpacity": 0.5}
 
             folium.GeoJson(
                 gdf,
                 name="Provinciegrenzen",
+                style_function=style_function,
                 tooltip=folium.GeoJsonTooltip(fields=["Provincie_NL"], aliases=["Provincie:"], labels=False)
             ).add_to(m)
 
-            # Laadpalen tonen
+            # ------------------- Laadpalen op kaart -------------------
             if provincie_keuze == "Heel Nederland":
                 coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
-                # filter mogelijke NaN-coördinaten
                 coords = [(lat, lon) for lat, lon in coords if not (pd.isna(lat) or pd.isna(lon))]
-                if coords:
-                    FastMarkerCluster(data=coords).add_to(m)
+                FastMarkerCluster(data=coords).add_to(m)
             else:
                 marker_cluster = MarkerCluster().add_to(m)
                 for _, row in df_prov.iterrows():
-                    lat = row.get("AddressInfo.Latitude")
-                    lon = row.get("AddressInfo.Longitude")
+                    lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
                     if pd.isna(lat) or pd.isna(lon):
                         continue
-                    popup = (
-                        f"<b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>"
-                        f"{row.get('AddressInfo.AddressLine1', '')}<br>"
-                        f"{row.get('AddressInfo.Town', '')}<br>"
-                        f"Kosten: {row.get('UsageCost', 'N/B')}<br>"
-                        f"Provider: {row.get('OperatorTitle', 'Onbekend')}<br>"
-                        f"Vermogen: {row.get('PowerKW', 'N/B')} kW"
-                    )
+                    popup = f"""
+                    <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                    {row.get('AddressInfo.AddressLine1', '')}<br>
+                    {row.get('AddressInfo.Town', '')}<br>
+                    Kosten: {row.get('UsageCost', 'N/B')}<br>
+                    Provider: {row.get('OperatorTitle', 'Onbekend')}<br>
+                    Vermogen: {row.get('PowerKW', 'N/B')} kW
+                    """
                     folium.Marker(
                         location=[lat, lon],
                         popup=folium.Popup(popup, max_width=300),
@@ -700,28 +652,22 @@ if page == "⚡️ Laadpalen":
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
-                st.metric("Gemiddelde kosten", fmt_euro(gemiddelde))
-                # Correct gebruik: maak 2 kolommen
+                st.metric("Gemiddelde kosten", fmt_cost(gemiddelde))
                 colc1, colc2 = st.columns(2)
                 with colc1:
-                    st.metric("Goedkoopste", fmt_euro(goedkoopste))
+                    st.metric("Goedkoopste", fmt_cost(goedkoopste))
                 with colc2:
-                    st.metric("Duurste", fmt_euro(duurste))
+                    st.metric("Duurste", fmt_cost(duurste))
 
                 st.markdown("#### Providers")
                 if not provider_counts.empty:
-                    fig = px.bar(
-                        provider_counts,
-                        x="Aantal",
-                        y="Provider",
-                        orientation="h",
-                        height=250,
-                        title="Top 5 providers"
-                    )
-                    fig.update_layout(yaxis_title="", xaxis_title="Aantal laadpunten", margin=dict(l=0, r=0, t=20, b=20))
+                    fig = px.bar(provider_counts, x="Aantal", y="Provider",
+                                orientation="h", height=250,
+                                title="", color="Aantal", color_continuous_scale="blues")
+                    fig.update_layout(yaxis_title="", xaxis_title="Aantal laadpunten", coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.info("Geen providerinformatie beschikbaar in de dataset.")
+                    st.info("Geen providerinformatie beschikbaar.")
 
             st.markdown("---")
             st.markdown("#### Legenda Laadpaaldichtheid")
