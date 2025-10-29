@@ -562,12 +562,6 @@ if page == "⚡️ Laadpalen":
         else:
             df_all["OperatorTitle"] = np.nan
 
-        # --- ✅ DEBUG: Controleer providerkolommen ---
-        with st.expander("🧩 Debug-informatie (tijdelijk)"):
-            st.write("Kolommen in df_all:", list(df_all.columns))
-            st.write("Aantal unieke providers:", df_all["OperatorTitle"].nunique(dropna=True))
-            st.write("Voorbeeld providerwaarden:", df_all["OperatorTitle"].dropna().unique()[:10])
-
         # ---------------- Filter per provincie -------------------
         if provincie_keuze != "Heel Nederland":
             df_prov = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
@@ -658,13 +652,15 @@ if page == "⚡️ Laadpalen":
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
-                # Metrics met duidelijke labels
-                st.metric("Gemiddelde kosten (€/kWh)", fmt_cost(gemiddelde))
-                colc1, colc2 = st.columns(2)
-                with colc1:
-                    st.metric("Goedkoopste", fmt_cost(goedkoopste).replace("/kWh", ""))
-                with colc2:
-                    st.metric("Duurste", fmt_cost(duurste).replace("/kWh", ""))
+            # Metrics met duidelijke labels
+            st.metric("Gemiddelde kosten (€/kWh)", fmt_cost(gemiddelde))
+            colc1, colc2 = st.columns(2)
+            with colc1:
+                st.metric("Goedkoopste", fmt_cost(goedkoopste).replace("/kWh", ""))
+            with colc2:
+                st.metric("Duurste", fmt_cost(duurste).replace("/kWh", ""))
+
+
 
                 st.markdown("#### Providers")
                 if not provider_counts.empty:
@@ -688,7 +684,6 @@ if page == "⚡️ Laadpalen":
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
 
 
 # ------------------- Pagina 2 --------------------------
