@@ -443,6 +443,17 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
+        # ------------------- Functie om provinciegrenzen te laden --------------------
+        @st.cache_data(ttl=86400)
+        def load_provincie_grenzen():
+            """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
+            import geopandas as gpd
+
+            url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
+            gdf = gpd.read_file(url)
+            if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
+                gdf = gdf.to_crs(epsg=4326)
+            return gdf
         # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
