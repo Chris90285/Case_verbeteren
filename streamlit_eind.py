@@ -517,13 +517,13 @@ if page == "⚡️ Laadpalen":
                 # Toon alles transparant
                 return {
                     "fillColor": "#00000000",
-                    "color": "#00b4d8",
+                    "color": "#050606",
                     "weight": 1.5
                 }
             elif naam == provincie_keuze:
                 return {
                     "fillColor": "#00000000",  # transparant
-                    "color": "#00b4d8",        # turquoise rand
+                    "color": "#050606",        
                     "weight": 3
                 }
             else:
@@ -535,12 +535,32 @@ if page == "⚡️ Laadpalen":
                 }
 
         # ------------------- Grenzen Toevoegen ------------------
+            # Tooltip met Nederlandse provincienaam
+        def tooltip_function(feature):
+            naam = feature["properties"]["Provincie"]
+            # Vertaal eventueel via mapping terug naar Nederlands
+            nederlandse_naam = provincie_mapping.get(naam, naam)
+            return f"<b>Provincie:</b> {nederlandse_naam}"
+
+        # GeoJSON toevoegen met tooltip
         folium.GeoJson(
             gdf,
             name="Provinciegrenzen",
             style_function=style_function,
-            tooltip=folium.GeoJsonTooltip(fields=["Provincie"], aliases=["Provincie:"])
+            tooltip=folium.GeoJsonTooltip(
+                fields=["Provincie"],
+                aliases=["Provincie:"],
+                labels=False,
+                sticky=True,
+                localize=True
+            ),
+            highlight_function=lambda x: {
+                "weight": 4,
+                "color": "#00b4d8",
+                "fillOpacity": 0.3
+            }
         ).add_to(m)
+
 
         # ------------------- Kaart Tonen ------------------------
         st_folium(m, width=900, height=650)
