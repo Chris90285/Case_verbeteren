@@ -626,24 +626,23 @@ if page == "⚡️ Laadpalen":
             # --- Gebruik gecorrigeerde center-positie (met offset) ---
             lat_center, lon_center = st.session_state["map_center"]
 
-            # --- Correcte offsetlogica ---
+            # Offset alleen gebruiken bij standaard provincieweergave
             if st.session_state.get("highlight_id") is None:
-                # Standaardpositie: iets naar rechts duwen voor layout
-                if provincie_keuze == "Heel Nederland":
-                    offset = 0.8   # kleine verschuiving naar rechts
-                else:
-                    offset = 0.3   # lichte verschuiving bij provincies
+                # Standaardcentrering
+                offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
             else:
-                # Als je op een laadpunt klikt → exacte locatie
-                offset = 0.0
+                # Klik op specifiek laadpunt — kleine correctie per context
+                if provincie_keuze == "Heel Nederland":
+                    offset = 2.2  # iets kleiner dan standaard 3.0
+                else:
+                    offset = 0.15  # licht naar rechts bij provincieweergave
 
-            # --- Kaart tekenen ---
+
             m = folium.Map(
                 location=[lat_center, lon_center + offset],
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
-)
-
+            )
 
 
 
