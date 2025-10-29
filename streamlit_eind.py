@@ -651,8 +651,10 @@ if page == "⚡️ Laadpalen":
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
                 st.metric("Gemiddelde kosten", f"€{gemiddelde:.2f}/kWh" if not np.isnan(gemiddelde) else "N/B")
-                colc1= st.columns(1)
+                colc1, colc2 = st.columns(1)
                 with colc1:
+                    st.metric("Goedkoopste", f"€{goedkoopste:.2f}/kWh" if not np.isnan(goedkoopste) else "N/B")
+                with colc2:
                     st.metric("Duurste", f"€{duurste:.2f}/kWh" if not np.isnan(duurste) else "N/B")
 
                 st.markdown("#### Providers")
