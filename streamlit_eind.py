@@ -442,46 +442,113 @@ if page == "⚡️ Laadpalen":
 
     else:
 
+
+        # ------------------- Data Functie -----------------------
         @st.cache_data(ttl=86400)
         def load_provincie_grenzen():
-            """Laadt de provinciegrenzen van Nederland (GeoJSON)."""
+            """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
             url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
             gdf = gpd.read_file(url)
             if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
                 gdf = gdf.to_crs(epsg=4326)
             return gdf
 
-        # ---------------- KAART PROVINCIEGRENZEN -----------------
+        # ------------------- Pagina Weergave --------------------
         st.markdown("## 🗺️ Kaart van Nederland – Provinciegrenzen")
         st.markdown("---")
 
         with st.spinner("Provinciegrenzen laden..."):
             gdf = load_provincie_grenzen()
 
-        # Controleer kolomnamen
-        st.write("Kolommen in GeoJSON:", list(gdf.columns))
+        # ------------------- Naam Correctie ----------------------
+        # Cartomap gebruikt PROV_NAAM als kolom
+        prov_col = "PROV_NAAM" if "PROV_NAAM" in gdf.columns else gdf.columns[0]
 
-        # Kies juiste kolomnaam voor tooltip
-        tooltip_col = "PROV_NAAM" if "PROV_NAAM" in gdf.columns else gdf.columns[0]
+        # Mapping om consistent te zijn met jouw eerdere code
+        provincie_mapping = {
+            "Groningen": "Groningen",
+            "Friesland": "Friesland",
+            "Fryslân": "Friesland",
+            "Drenthe": "Drenthe",
+            "Overijssel": "Overijssel",
+            "Flevoland": "Flevoland",
+            "Gelderland": "Gelderland",
+            "Utrecht": "Utrecht",
+            "Noord-Holland": "Noord-Holland",
+            "North Holland": "Noord-Holland",
+            "Zuid-Holland": "Zuid-Holland",
+            "South Holland": "Zuid-Holland",
+            "Zeeland": "Zeeland",
+            "Noord-Brabant": "Noord-Brabant",
+            "North Brabant": "Noord-Brabant",
+            "Limburg": "Limburg"
+        }
 
-        # Maak folium kaart
-        m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="OpenStreetMap")
+        # Normaliseer provincie-namen in de GeoDataFrame
+        gdf["Provincie"] = gdf[prov_col].replace(provincie_mapping)
 
-        # Voeg de provinciegrenzen toe
+        # ------------------- Dropdown Keuze ---------------------
+        provincies = {
+            "Heel Nederland": [52.1, 5.3, 7],
+            "Groningen": [53.2194, 6.5665, 9],
+            "Friesland": [53.1642, 5.7818, 9],
+            "Drenthe": [52.9476, 6.6231, 9],
+            "Overijssel": [52.4380, 6.5010, 9],
+            "Flevoland": [52.5270, 5.5953, 9],
+            "Gelderland": [52.0452, 5.8712, 9],
+            "Utrecht": [52.0907, 5.1214, 9],
+            "Noord-Holland": [52.5206, 4.7885, 9],
+            "Zuid-Holland": [52.0116, 4.3571, 9],
+            "Zeeland": [51.4940, 3.8497, 9],
+            "Noord-Brabant": [51.5730, 5.0670, 9],
+            "Limburg": [51.2490, 5.9330, 9],
+        }
+
+        provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
+        center_lat, center_lon, zoom = provincies[provincie_keuze]
+
+        # ------------------- Kaart Maken ------------------------
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom, tiles="OpenStreetMap")
+
+        # Stijl-functie: gekozen provincie transparant, rest grijs
+        def style_function(feature):
+            naam = feature["properties"]["Provincie"]
+            if provincie_keuze == "Heel Nederland":
+                # Toon alles transparant
+                return {
+                    "fillColor": "#00000000",
+                    "color": "#00b4d8",
+                    "weight": 1.5
+                }
+            elif naam == provincie_keuze:
+                return {
+                    "fillColor": "#00000000",  # transparant
+                    "color": "#00b4d8",        # turquoise rand
+                    "weight": 3
+                }
+            else:
+                return {
+                    "fillColor": "#2b2b2b",    # donkergrijs
+                    "color": "#3a3a3a",
+                    "weight": 1,
+                    "fillOpacity": 0.5
+                }
+
+        # ------------------- Grenzen Toevoegen ------------------
         folium.GeoJson(
             gdf,
             name="Provinciegrenzen",
-            style_function=lambda feature: {
-                "fillColor": "#00000000",   # transparant
-                "color": "#00b4d8",         # turquoise lijnen
-                "weight": 2,
-                "dashArray": "5, 5"
-            },
-            tooltip=folium.GeoJsonTooltip(fields=[tooltip_col], aliases=["Provincie:"])
+            style_function=style_function,
+            tooltip=folium.GeoJsonTooltip(fields=["Provincie"], aliases=["Provincie:"])
         ).add_to(m)
 
+        # ------------------- Kaart Tonen ------------------------
         st_folium(m, width=900, height=650)
-        st.markdown("<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>", unsafe_allow_html=True)
+
+        st.markdown(
+            "<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>",
+            unsafe_allow_html=True
+        )
 
         
 # ------------------- Pagina 2 --------------------------
