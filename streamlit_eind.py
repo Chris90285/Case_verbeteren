@@ -441,179 +441,185 @@ if page == "⚡️ Laadpalen":
     #------------NIEUWE PAGINA 1--------------
 
     else:
+            # ------------------- Data Functie -----------------------
+    @st.cache_data(ttl=86400)
+    def load_provincie_grenzen():
+        """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
+        url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
+        gdf = gpd.read_file(url)
+        if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
+            gdf = gdf.to_crs(epsg=4326)
+        return gdf
 
-        # ------------------- Data Functie -----------------------
-        @st.cache_data(ttl=86400)
-        def load_provincie_grenzen():
-            """Laadt provinciegrenzen van Nederland (GeoJSON via Cartomap)."""
-            url = "https://cartomap.github.io/nl/wgs84/provincie_2023.geojson"
-            gdf = gpd.read_file(url)
-            if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
-                gdf = gdf.to_crs(epsg=4326)
-            return gdf
+    # ------------------- Pagina Weergave --------------------
+    st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
+    st.markdown("---")
 
-        # ------------------- Pagina Weergave --------------------
-        st.markdown("## Kaart Laadpalen Nederland")
-        st.markdown("---")
+    with st.spinner("Provinciegrenzen laden..."):
+        gdf = load_provincie_grenzen()
 
-        with st.spinner("Provinciegrenzen laden..."):
-            gdf = load_provincie_grenzen()
+    # ------------------- Naam Correctie / Mapping ----------------------
+    pv_to_nl = {
+        "PV27": "Noord-Holland",
+        "PV21": "Friesland",
+        "PV20": "Groningen",
+        "PV22": "Drenthe",
+        "PV24": "Flevoland",
+        "PV23": "Overijssel",
+        "PV25": "Gelderland",
+        "PV28": "Zuid-Holland",
+        "PV26": "Utrecht",
+        "PV29": "Zeeland",
+        "PV30": "Noord-Brabant",
+        "PV31": "Limburg"
+    }
 
-        # ------------------- Naam Correctie / Mapping ----------------------
-        pv_to_nl = {
-            "PV27": "Noord-Holland",
-            "PV21": "Friesland",
-            "PV20": "Groningen",
-            "PV22": "Drenthe",
-            "PV24": "Flevoland",
-            "PV23": "Overijssel",
-            "PV25": "Gelderland",
-            "PV28": "Zuid-Holland",
-            "PV26": "Utrecht",
-            "PV29": "Zeeland",
-            "PV30": "Noord-Brabant",
-            "PV31": "Limburg"
-        }
+    mogelijke_kolommen = ["PROV_NAAM", "provincie", "Provincie", "statnaam", "naam"]
+    bron_name_col = next((c for c in mogelijke_kolommen if c in gdf.columns), None)
 
-        provincie_mapping = {
-            "Groningen": "Groningen",
-            "Friesland": "Friesland",
-            "Fryslân": "Friesland",
-            "Drenthe": "Drenthe",
-            "Overijssel": "Overijssel",
-            "Flevoland": "Flevoland",
-            "Gelderland": "Gelderland",
-            "Utrecht": "Utrecht",
-            "Noord-Holland": "Noord-Holland",
-            "North Holland": "Noord-Holland",
-            "Zuid-Holland": "Zuid-Holland",
-            "South Holland": "Zuid-Holland",
-            "Zeeland": "Zeeland",
-            "Noord-Brabant": "Noord-Brabant",
-            "North Brabant": "Noord-Brabant",
-            "Limburg": "Limburg"
-        }
+    code_col = None
+    for c in gdf.columns:
+        sample_vals = gdf[c].astype(str).dropna().unique()[:10]
+        if any(re.match(r"^PV\d{1,3}$", str(v)) for v in sample_vals):
+            code_col = c
+            break
 
-        mogelijke_kolommen = ["PROV_NAAM", "provincie", "Provincie", "statnaam", "naam"]
-        bron_name_col = next((c for c in mogelijke_kolommen if c in gdf.columns), None)
-
-        code_col = None
-        for c in gdf.columns:
-            sample_vals = gdf[c].astype(str).dropna().unique()[:10]
-            if any(re.match(r"^PV\d{1,3}$", str(v)) for v in sample_vals):
-                code_col = c
-                break
-
-        if code_col is not None:
-            gdf["ProvCode"] = gdf[code_col].astype(str)
-            gdf["Provincie_NL"] = gdf["ProvCode"].map(pv_to_nl)
-            if bron_name_col is not None:
-                gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[bron_name_col].replace(provincie_mapping))
-            else:
-                gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[code_col])
+    if code_col is not None:
+        gdf["ProvCode"] = gdf[code_col].astype(str)
+        gdf["Provincie_NL"] = gdf["ProvCode"].map(pv_to_nl)
+        if bron_name_col is not None:
+            gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[bron_name_col])
         else:
-            if bron_name_col is not None:
-                gdf["Provincie_NL"] = gdf[bron_name_col].replace(provincie_mapping)
-            else:
-                first_col = gdf.columns[0]
-                gdf["Provincie_NL"] = gdf[first_col].astype(str).replace(provincie_mapping)
+            gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna(gdf[code_col])
+    else:
+        if bron_name_col is not None:
+            gdf["Provincie_NL"] = gdf[bron_name_col]
+        else:
+            first_col = gdf.columns[0]
+            gdf["Provincie_NL"] = gdf[first_col].astype(str)
 
-        gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna("Onbekend")
-        gdf["Provincie"] = gdf["Provincie_NL"]
+    gdf["Provincie_NL"] = gdf["Provincie_NL"].fillna("Onbekend")
+    gdf["Provincie"] = gdf["Provincie_NL"]
 
-        # ------------------- Dropdown Keuze ---------------------
-        provincies = {
-            "Heel Nederland": [52.1, 5.3, 7],
-            "Groningen": [53.2194, 6.5665, 9],
-            "Friesland": [53.1642, 5.7818, 9],
-            "Drenthe": [52.9476, 6.6231, 9],
-            "Overijssel": [52.4380, 6.5010, 9],
-            "Flevoland": [52.5270, 5.5953, 9],
-            "Gelderland": [52.0452, 5.8712, 9],
-            "Utrecht": [52.0907, 5.1214, 9],
-            "Noord-Holland": [52.5206, 4.7885, 9],
-            "Zuid-Holland": [52.0116, 4.3571, 9],
-            "Zeeland": [51.4940, 3.8497, 9],
-            "Noord-Brabant": [51.5730, 5.0670, 9],
-            "Limburg": [51.2490, 5.9330, 9],
+    # ------------------- Dropdown Keuze ---------------------
+    provincies = {
+        "Heel Nederland": [52.1, 5.3, 200],
+        "Groningen": [53.2194, 6.5665, 60],
+        "Friesland": [53.1642, 5.7818, 60],
+        "Drenthe": [52.9476, 6.6231, 60],
+        "Overijssel": [52.4380, 6.5010, 60],
+        "Flevoland": [52.5270, 5.5953, 60],
+        "Gelderland": [52.0452, 5.8712, 60],
+        "Utrecht": [52.0907, 5.1214, 60],
+        "Noord-Holland": [52.5206, 4.7885, 60],
+        "Zuid-Holland": [52.0116, 4.3571, 60],
+        "Zeeland": [51.4940, 3.8497, 60],
+        "Noord-Brabant": [51.5730, 5.0670, 60],
+        "Limburg": [51.2490, 5.9330, 60],
+    }
+
+    provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
+    center_lat, center_lon, radius_km = provincies[provincie_keuze]
+
+    # ------------------- Kaart Maken ------------------------
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=7 if provincie_keuze == "Heel Nederland" else 9, tiles="OpenStreetMap")
+
+    # 🎨 Stijl-functie
+    def style_function(feature):
+        naam = feature["properties"].get("Provincie_NL", "Onbekend")
+
+        # Altijd zwarte grenzen
+        base_style = {
+            "color": "black",
+            "weight": 1.5,
+            "fillOpacity": 0.0,
+            "fillColor": "#00000000"
         }
 
-        provincie_keuze = st.selectbox("📍 Kies een provincie", list(provincies.keys()), index=0)
-        center_lat, center_lon, zoom = provincies[provincie_keuze]
-
-        # ------------------- Kaart Maken ------------------------
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom, tiles="OpenStreetMap")
-
-        # Stijl-functie
-        def style_function(feature):
-            naam = feature["properties"].get("Provincie_NL", "Onbekend")
-
-            # Altijd zwarte grenzen
-            base_style = {
+        if provincie_keuze == "Heel Nederland":
+            return base_style
+        elif naam == provincie_keuze:
+            return {
+                "fillColor": "#00000000",
+                "color": "#b30000",
+                "weight": 3,
+                "fillOpacity": 0.0
+            }
+        else:
+            return {
+                "fillColor": "#2b2b2b",
                 "color": "black",
                 "weight": 1.5,
-                "fillOpacity": 0.0,
-                "fillColor": "#00000000"
+                "fillOpacity": 0.5
             }
 
-            if provincie_keuze == "Heel Nederland":
-                # Alles transparant
-                return base_style
-            elif naam == provincie_keuze:
-                # Geselecteerde provincie: turquoise rand, transparant
-                return {
-                    "fillColor": "#00000000",
-                    "color": "#00b4d8",
-                    "weight": 3,
-                    "fillOpacity": 0.0
-                }
+    # Hover effect 
+    def highlight_function(feature):
+        naam = feature["properties"].get("Provincie_NL", "")
+        if provincie_keuze == "Heel Nederland":
+            return {
+                "fillColor": "#4f4f4f",
+                "fillOpacity": 0.4,
+                "color": "#b30000",
+                "weight": 2.5
+            }
+        else:
+            return {
+                "fillColor": "#2b2b2b",
+                "fillOpacity": 0.4,
+                "color": "#b30000",
+                "weight": 2.5
+            }
+
+    # ------------------- Grenzen Toevoegen ------------------
+    folium.GeoJson(
+        gdf,
+        name="Provinciegrenzen",
+        style_function=style_function,
+        highlight_function=highlight_function,
+        tooltip=folium.GeoJsonTooltip(
+            fields=["Provincie_NL"],
+            aliases=["Provincie:"],
+            labels=False,
+            sticky=True
+        )
+    ).add_to(m)
+
+    # ------------------- Laadpalen Ophalen ------------------
+    with st.spinner(f"🔌 Laadpalen laden voor {provincie_keuze}..."):
+        df_all = get_all_laadpalen_nederland()
+
+        if provincie_keuze == "Heel Nederland":
+            # Toon alle 5000 laadpalen zonder popups (snel)
+            coords = list(zip(df_all["AddressInfo.Latitude"], df_all["AddressInfo.Longitude"]))
+            FastMarkerCluster(data=coords).add_to(m)
+            st.info("Snelmodus: alle 5000 laadpalen getoond zonder popups voor prestaties.")
+        else:
+            # Filter laadpalen binnen gekozen provincie
+            provincie_df = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+
+            if len(provincie_df) == 0:
+                st.warning(f"Geen laadpalen gevonden voor {provincie_keuze}.")
             else:
-                # Andere provincies: grijs gevuld, zwarte rand
-                return {
-                    "fillColor": "#2b2b2b",
-                    "color": "black",
-                    "weight": 1.5,
-                    "fillOpacity": 0.5
-                }
+                st.success(f"{len(provincie_df)} laadpalen gevonden voor {provincie_keuze}.")
+                marker_cluster = MarkerCluster().add_to(m)
+                for _, row in provincie_df.iterrows():
+                    lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
+                    popup = f"""
+                    <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                    {row.get('AddressInfo.AddressLine1', '')}<br>
+                    {row.get('AddressInfo.Town', '')}<br>
+                    Kosten: {row.get('UsageCost', 'N/B')}<br>
+                    Vermogen: {row.get('PowerKW', 'N/B')} kW
+                    """
+                    icon = folium.Icon(color="green", icon="bolt", prefix="fa")
+                    folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
-        # Hover effect 
-        def highlight_function(feature):
-            naam = feature["properties"].get("Provincie_NL", "")
-            if provincie_keuze == "Heel Nederland":
-                # Hover in "Heel Nederland" mode: vul iets donkerder grijs, rode rand
-                return {
-                    "fillColor": "#4f4f4f",
-                    "fillOpacity": 0.4,
-                    "color": "#b30000",  # donkerrood, niet te fel
-                    "weight": 2.5
-                }
-            else:
-                # Hover in provincie-modus: rand rood
-                return {
-                    "fillColor": "#2b2b2b",
-                    "fillOpacity": 0.4,
-                    "color": "#b30000",
-                    "weight": 2.5
-                }
+    # ------------------- Kaart Tonen ------------------------
+    st_folium(m, width=900, height=650)
 
-        # ------------------- Grenzen Toevoegen ------------------
-        folium.GeoJson(
-            gdf,
-            name="Provinciegrenzen",
-            style_function=style_function,
-            highlight_function=highlight_function,
-            tooltip=folium.GeoJsonTooltip(
-                fields=["Provincie_NL"],
-                aliases=["Provincie:"],
-                labels=False,
-                sticky=True
-            )
-        ).add_to(m)
+    st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
 
-        # ------------------- Kaart Tonen ------------------------
-        st_folium(m, width=900, height=650)
-
-        st.markdown("<small>Bron: Cartomap GeoJSON – Provinciegrenzen Nederland</small>", unsafe_allow_html=True)
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
