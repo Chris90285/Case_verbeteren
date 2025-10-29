@@ -537,8 +537,30 @@ if page == "⚡️ Laadpalen":
             return np.nan
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
-        df_all["OperatorTitle"] = df_all["OperatorInfo.Title"] if "OperatorInfo.Title" in df_all.columns else df_all.get("OperatorInfo", None)
+        ####
 
+
+        # --- Providerinformatie  ---
+        if "OperatorInfo.Title" in df_all.columns:
+            df_all["OperatorTitle"] = df_all["OperatorInfo.Title"]
+        elif "OperatorInfo" in df_all.columns:
+            
+            def extract_operator_name(op):
+                if isinstance(op, dict):
+                    return op.get("Title", np.nan)
+                elif isinstance(op, str):
+                    try:
+                        j = json.loads(op)
+                        return j.get("Title", np.nan)
+                    except Exception:
+                        return np.nan
+                else:
+                    return np.nan
+            df_all["OperatorTitle"] = df_all["OperatorInfo"].apply(extract_operator_name)
+        else:
+            df_all["OperatorTitle"] = np.nan
+
+        ###
         if provincie_keuze != "Heel Nederland":
             df_prov = df_all[df_all["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
         else:
@@ -609,9 +631,6 @@ if page == "⚡️ Laadpalen":
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
 
         with col2:
-            st.markdown(f"### ℹ️ Informatie – {provincie_keuze}")
-            st.markdown("---")
-
             if df_prov.empty:
                 st.warning("Geen laadpaaldata gevonden voor dit gebied.")
             else:
@@ -622,7 +641,7 @@ if page == "⚡️ Laadpalen":
                 with colc2:
                     st.metric("Duurste", f"€{duurste:.2f}/kWh" if not np.isnan(duurste) else "N/B")
 
-                st.markdown("#### 🔌 Top 5 Providers")
+                st.markdown("#### Providers")
                 if not provider_counts.empty:
                     fig = px.bar(provider_counts, x="Aantal", y="Provider",
                                 orientation="h", height=250,
@@ -633,7 +652,7 @@ if page == "⚡️ Laadpalen":
                     st.info("Geen providerinformatie beschikbaar.")
 
             st.markdown("---")
-            st.markdown("#### 🗺️ Legenda Laadpaaldichtheid")
+            st.markdown("#### Legenda Laadpaaldichtheid")
             st.markdown("""
             <div style='padding: 10px; background-color: #1E1E1E; border-radius: 10px;'>
                 <div style='display: flex; flex-direction: column; gap: 4px;'>
