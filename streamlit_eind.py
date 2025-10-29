@@ -628,9 +628,15 @@ if page == "⚡️ Laadpalen":
 
             # Offset alleen gebruiken bij standaard provincieweergave
             if st.session_state.get("highlight_id") is None:
+                # Standaardcentrering
                 offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
             else:
-                offset = 0.15  # Geen verschuiving bij klik op specifiek laadpunt
+                # Klik op specifiek laadpunt — kleine correctie per context
+                if provincie_keuze == "Heel Nederland":
+                    offset = 2.2  # iets kleiner dan standaard 3.0
+                else:
+                    offset = 0.15  # licht naar rechts bij provincieweergave
+
 
             m = folium.Map(
                 location=[lat_center, lon_center + offset],
