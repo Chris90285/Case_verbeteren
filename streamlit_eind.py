@@ -635,7 +635,7 @@ if page == "⚡️ Laadpalen":
                     display_lon = base_lon + 1.1  # GEEN verschuiving bij provincies
             else:
                 # Bij klik op laadpaal → iets naar links zodat marker goed in beeld komt
-                display_lon = base_lon + 0.01  # eventueel iets aanpassen tussen -0.1 en +0.1 indien nodig
+                display_lon = base_lon - 0.12  # eventueel iets aanpassen tussen -0.1 en +0.1 indien nodig
 
 
             m = folium.Map(
