@@ -632,7 +632,7 @@ if page == "⚡️ Laadpalen":
                 if provincie_keuze == "Heel Nederland":
                     display_lon = base_lon + 2.8  # Nederland iets verschuiven voor mooi overzicht
                 else:
-                    display_lon = base_lon + 0.6  # GEEN verschuiving bij provincies
+                    display_lon = base_lon + 1.1  # GEEN verschuiving bij provincies
             else:
                 # Bij klik op laadpaal → iets naar links zodat marker goed in beeld komt
                 display_lon = base_lon + 0.01  # eventueel iets aanpassen tussen -0.1 en +0.1 indien nodig
