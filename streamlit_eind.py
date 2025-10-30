@@ -626,16 +626,17 @@ if page == "⚡️ Laadpalen":
             # --- Gebruik gecorrigeerde center-positie (met offset) ---
             lat_center, lon_center = st.session_state["map_center"]
 
-            # Offset alleen gebruiken bij standaard provincieweergave
+            # --- Offset bepalen op basis van context ---
+            # Alleen gebruiken bij initiële weergave (geen geselecteerde laadpaal)
             if st.session_state.get("highlight_id") is None:
-                # Standaardcentrering
-                offset = 3.0 if provincie_keuze == "Heel Nederland" else 0.8
-            else:
-                # Klik op specifiek laadpunt — kleine correctie per context
                 if provincie_keuze == "Heel Nederland":
-                    offset = 2.2  # iets kleiner dan standaard 3.0
+                    offset = 2.8   # lichte verschuiving naar rechts voor overzicht
                 else:
-                    offset = 0.15  # licht naar rechts bij provincieweergave
+                    offset = 0.6   # subtiele verschuiving voor provincies
+            else:
+                # Bij klik op specifieke laadpaal: altijd exact centreren
+                offset = 0.0
+
 
 
             m = folium.Map(
