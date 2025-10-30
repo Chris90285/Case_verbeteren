@@ -637,7 +637,7 @@ if page == "⚡️ Laadpalen":
                 if provincie_keuze == "Heel Nederland":
                     display_lon = base_lon + 0.01  
                 else:
-                    display_lon = base_lon + 0.12
+                    display_lon = base_lon + 0.13
 
 
             m = folium.Map(
@@ -730,7 +730,6 @@ if page == "⚡️ Laadpalen":
             """, unsafe_allow_html=True)
 
 
-
         # --- Grafiek verdeling / kosten / verband ---
         st.markdown("---")
         st.markdown("## 📊 Verdeling & Verband tussen Laadpalen en Kosten")
@@ -797,13 +796,33 @@ if page == "⚡️ Laadpalen":
             df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
             df_agg = df_agg.sort_values("Percentage", ascending=False)
 
-            # Dropdown met 3 opties
+            # --- Extra: oppervlakte van provincies (km²), voorbeeldwaarden ---
+            oppervlakte_dict = {
+                "Groningen": 2_324,     # km² land (bron: Metatopos) :contentReference[oaicite:0]{index=0}
+                "Friesland": 3_336,
+                "Drenthe": 2_633,
+                "Overijssel": 3_319,
+                "Flevoland": 1_412,
+                "Gelderland": 4_964,
+                "Utrecht": 1_485,
+                "Noord-Holland": 2_665,
+                "Zuid-Holland": 2_700,
+                "Zeeland": 1_782,
+                "Noord-Brabant": 4_905,
+                "Limburg": 2_147
+            }
+
+            # Voeg oppervlakte toe in df_agg (als kolom “Oppervlakte”)
+            df_agg["Oppervlakte_km2"] = df_agg["Provincie"].map(oppervlakte_dict)
+
+            # Dropdown met 4 opties (3 oude + 1 nieuwe)
             keuze = st.selectbox(
                 "📈 Kies welke verdeling of verband je wilt zien:",
                 [
                     "Verdeling laadpalen per provincie (%)",
                     "Gemiddelde kosten per provincie",
-                    "Verband tussen beschikbaarheid en kosten"
+                    "Verband tussen beschikbaarheid en kosten",
+                    "Optimale balans (kosten vs beschikbaarheid per km²)"
                 ]
             )
 
@@ -831,11 +850,10 @@ if page == "⚡️ Laadpalen":
                 fig.update_layout(yaxis_title="€ per kWh")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # --- Optie 3: Verband tussen beschikbaarheid en kosten ---
+            # --- Optie 3: Verband beschikbaarheid vs kosten ---
             elif keuze == "Verband tussen beschikbaarheid en kosten":
                 fig = go.Figure()
 
-                # Balken: aandeel laadpalen
                 fig.add_trace(go.Bar(
                     x=df_agg["Provincie"],
                     y=df_agg["Percentage"],
@@ -845,7 +863,6 @@ if page == "⚡️ Laadpalen":
                     yaxis="y1"
                 ))
 
-                # Lijn: gemiddelde kosten
                 fig.add_trace(go.Scatter(
                     x=df_agg["Provincie"],
                     y=df_agg["Gemiddelde_kosten"],
@@ -877,15 +894,91 @@ if page == "⚡️ Laadpalen":
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
+
                 st.caption(
                     "Je ziet dat provincies met een groter aandeel laadpalen (blauwe balken) "
                     "gemiddeld lagere laadtarieven hebben (rode lijn)."
                 )
 
+                # Hier kun je dezelfde regressie-optie toevoegen als je wilt
+                if st.checkbox("🔍 Bepaal optimale provincie via regressie"):
+                    import statsmodels.api as sm
+                    X = sm.add_constant(df_agg["Percentage"])
+                    y = df_agg["Gemiddelde_kosten"]
+                    model = sm.OLS(y, X, missing="drop").fit()
+                    df_agg["Voorspeld"] = model.predict(X)
+                    corr = df_agg["Percentage"].corr(df_agg["Gemiddelde_kosten"])
+                    st.markdown(f"**📉 Correlatie:** `{corr:.2f}`")
+                    st.markdown(f"**Model:** Kosten = {model.params[0]:.3f} + {model.params[1]:.3f} × Percentage")
+                    idx = df_agg["Voorspeld"].idxmin()
+                    opt_prov = df_agg.loc[idx, "Provincie"]
+                    st.success(f"✅ Optimale provincie volgens model: **{opt_prov}**")
+
+            # --- Optie 4: Optimale balans (kosten vs beschikbaarheid per km²) ---
+            elif keuze == "Optimale balans (kosten vs beschikbaarheid per km²)":
+                st.subheader("⚖️ Optimale balans: kosten vs beschikbaarheid per km²")
+
+                # Bereken “laadpalen per km²” en “kosten per aandeel / km²”
+                # We gebruiken: ratio = Percentage / Oppervlakte (hoe meer % per km², hoe dichter)
+                df_agg["Dichtheid_rel"] = df_agg["Percentage"] / df_agg["Oppervlakte_km2"]
+                # En we combineren dit met kosten: bijvoorbeeld: score = Dichtheid_rel / Gemiddelde_kosten
+                df_agg["Balans_score"] = df_agg["Dichtheid_rel"] / df_agg["Gemiddelde_kosten"]
+
+                # Normaliseer of schaal zonodig (optioneel)
+                # Vind de provincie met hoogste balans_score
+                idx_opt = df_agg["Balans_score"].idxmax()
+                prov_opt = df_agg.loc[idx_opt, "Provincie"]
+
+                st.markdown(f"✅ **Optimale provincie (balans):** **{prov_opt}**")
+
+                # Plot: balk van Dichtheid_rel, lijn van kosten
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=df_agg["Provincie"],
+                    y=df_agg["Dichtheid_rel"],
+                    name="Relatieve dichtheid (% per km²)",
+                    marker_color="rgb(0, 200, 100)",
+                    opacity=0.7,
+                    yaxis="y1"
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df_agg["Provincie"],
+                    y=df_agg["Gemiddelde_kosten"],
+                    name="Gemiddelde kosten (€ per kWh)",
+                    mode="lines+markers",
+                    line=dict(color="rgb(255, 80, 80)", width=3),
+                    marker=dict(size=8, color="rgb(255, 130, 130)"),
+                    yaxis="y2"
+                ))
+
+                fig.update_layout(
+                    title="⚖️ Optimale balans tussen kosten en beschikbaarheid per km²",
+                    xaxis=dict(title="Provincie"),
+                    yaxis=dict(
+                        title="Relatieve dichtheid (% per km²)",
+                        showgrid=False,
+                        color="rgb(0, 200, 100)"
+                    ),
+                    yaxis2=dict(
+                        title="Gemiddelde kosten (€ per kWh)",
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
+                        color="rgb(255, 130, 130)"
+                    ),
+                    legend=dict(orientation="h", y=1.15, x=0.25),
+                    template="plotly_dark",
+                    height=500
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(
+                    "De balans-score is gedefinieerd als (percentage laadpalen per km²) gedeeld door kosten. "
+                    "Hoe hoger de score, hoe beter de combinatie van beschikbaarheid én lage kosten."
+                )
+
         else:
             st.warning("Kon geen landelijke data laden voor de grafiek.")
-
-
 
 
        
