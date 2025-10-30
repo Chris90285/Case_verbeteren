@@ -855,8 +855,8 @@ if page == "⚡️ Laadpalen":
                 kleuren = ["rgb(0,180,255)"] * len(df_agg)
 
                 # Checkbox 1: regressiemodel zonder oppervlakte
-                gebruik_regressie = st.checkbox("📊 Toon regressie-analyse en bepaal optimale provincie")
-                gebruik_oppervlakte = st.checkbox("🌍 Neem oppervlakte van provincie mee in berekening (alleen actief met bovenstaande optie)", disabled=not gebruik_regressie)
+                gebruik_regressie = st.checkbox("Optimale provincie (regressie-analyse)")
+                gebruik_oppervlakte = st.checkbox("Optimale provincie (regressie-analyse, gecorrigeerd voor oppervlakte)", disabled=not gebruik_regressie)
 
                 optimale_provincie = None
                 optimale_provincie_oppervlakte = None
@@ -877,7 +877,7 @@ if page == "⚡️ Laadpalen":
                     # Optimale provincie volgens model (laagste voorspelde kosten)
                     idx_opt = df_agg["Voorspeld"].idxmin()
                     optimale_provincie = df_agg.loc[idx_opt, "Provincie"]
-                    st.success(f"✅ Optimale provincie volgens regressiemodel: **{optimale_provincie}**")
+                    st.success(f"Optimale provincie: **{optimale_provincie}**")
 
                     kleuren[idx_opt] = "limegreen"
 
@@ -887,7 +887,7 @@ if page == "⚡️ Laadpalen":
                         idx_opt2 = df_agg["Aanpassing_oppervlakte"].idxmin()
                         optimale_provincie_oppervlakte = df_agg.loc[idx_opt2, "Provincie"]
 
-                        st.info(f"🌍 Aangepaste optimale provincie (met oppervlakte): **{optimale_provincie_oppervlakte}**")
+                        st.info(f"Optimale provincie (correctie voor oppervlakte): **{optimale_provincie_oppervlakte}**")
 
                         # Kleur ook deze provincie (anders dan limegreen)
                         kleuren[idx_opt2] = "orange"
@@ -915,7 +915,7 @@ if page == "⚡️ Laadpalen":
                 ))
 
                 fig.update_layout(
-                    title="⚖️ Verband tussen beschikbaarheid en kosten per provincie",
+                    title="Verband tussen beschikbaarheid en kosten per provincie",
                     xaxis=dict(title="Provincie"),
                     yaxis=dict(
                         title="Aandeel laadpalen (%)",
