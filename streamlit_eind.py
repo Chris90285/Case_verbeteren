@@ -623,27 +623,23 @@ if page == "⚡️ Laadpalen":
             if provincie_keuze == "Heel Nederland":
                 highlight_function = lambda x: {"fillColor": "#4b4b4b", "fillOpacity": 0.6, "color": "#cc0000", "weight": 3}
 
-            # --- Gebruik gecorrigeerde center-positie (met offset) ---
-            lat_center, lon_center = st.session_state["map_center"]
+            base_lat, base_lon = st.session_state["map_center"]
 
-            # --- Offset bepalen op basis van context ---
-            # Alleen gebruiken bij initiële weergave (geen geselecteerde laadpaal)
+            # Offset alleen visueel toepassen, niet opslaan
             if st.session_state.get("highlight_id") is None:
                 if provincie_keuze == "Heel Nederland":
-                    offset = 2.8   # lichte verschuiving naar rechts voor overzicht
+                    display_lon = base_lon + 2.8
                 else:
-                    offset = 0.6   # subtiele verschuiving voor provincies
+                    display_lon = base_lon + 0.6
             else:
-                # Bij klik op specifieke laadpaal: altijd exact centreren
-                offset = 0.5
-
-
+                display_lon = base_lon  # exact centreren bij highlight
 
             m = folium.Map(
-                location=[lat_center, lon_center + offset],
+                location=[base_lat, display_lon],
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
+
 
 
 
