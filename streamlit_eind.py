@@ -673,7 +673,12 @@ if page == "⚡️ Laadpalen":
                     lat_sel, lon_sel = sel["AddressInfo.Latitude"], sel["AddressInfo.Longitude"]
                     if not (pd.isna(lat_sel) or pd.isna(lon_sel)):
                         popup_sel = f"<b>{sel.get('AddressInfo.Title','Onbekend')}</b><br>{sel.get('AddressInfo.AddressLine1','')}<br>{sel.get('AddressInfo.Town','')}<br>Kosten: {sel.get('UsageCost','N/B')}<br>Vermogen: {sel.get('PowerKW','N/B')} kW"
-                        folium.Marker(location=[lat_sel, lon_sel], popup=folium.Popup(popup_sel,max_width=300), icon=folium.Icon(color="red", icon="bolt", prefix="fa")).add_to(m)
+                        folium.Marker(
+                            location=[lat_sel, lon_sel],
+                            popup=folium.Popup(popup_sel, max_width=300, autoPan=False),
+                            icon=folium.Icon(color="red", icon="bolt", prefix="fa")
+                        ).add_to(m)
+
 
             st_data = st_folium(m, width=900, height=650)
             st.markdown("<small>Bron: Cartomap GeoJSON & OpenChargeMap API</small>", unsafe_allow_html=True)
