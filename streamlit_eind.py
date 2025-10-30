@@ -630,9 +630,9 @@ if page == "⚡️ Laadpalen":
             # Alleen gebruiken bij initiële weergave (geen geselecteerde laadpaal)
             if st.session_state.get("highlight_id") is None:
                 if provincie_keuze == "Heel Nederland":
-                    offset = 2.8   # lichte verschuiving naar rechts voor overzicht
+                    offset = 2.3   # lichte verschuiving naar rechts voor overzicht
                 else:
-                    offset = 0.6   # subtiele verschuiving voor provincies
+                    offset = 0.4   # subtiele verschuiving voor provincies
             else:
                 # Bij klik op specifieke laadpaal: altijd exact centreren
                 offset = 0.0
