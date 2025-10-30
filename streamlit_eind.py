@@ -25,6 +25,8 @@ import warnings
 from datetime import datetime
 from streamlit_option_menu import option_menu
 import json
+from pathlib import Path
+import os
 
 # ------------------- Dark Mode Styling ----------------
 # ------------------------------------------------------
@@ -1154,7 +1156,7 @@ elif page == "🚘 Voertuigen":
         st.title("Staafdiagram: Laadtijd (uur) en Energie (kWh)")
 
         # --- Data inladen (altijd lokaal, geen uploader) ---
-        file_path = Path(__file__).parent / "Charging_data.pkl"
+        file_path = Path(os.getcwd()) / "Charging_data.pkl"
         try:
             df = pd.read_pickle(file_path)
         except Exception as e:
