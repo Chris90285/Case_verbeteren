@@ -1845,7 +1845,128 @@ elif page == "📊 Voorspellend model":
      #------------NIEUWE PAGINA 3--------------
 
     else:
-        st.write('hey')
+
+        # Pagina-instellingen
+        st.set_page_config(page_title="Model 2 - Realistische Voorspelling", layout="wide")
+        st.title("🔮 Model 2: Realistische Voorspelling van Voertuigsoorten t/m 2050")
+
+        st.markdown("""
+        Dit model voorspelt het aantal **benzine-, diesel- en elektrische auto's** in Nederland tot 2050.  
+        In plaats van rechte lijnen (lineaire groei), gebruikt dit model **realistische curves**:
+        - 🔻 Benzine en Diesel nemen **exponentieel af**  
+        - ⚡ Elektrisch groeit **logistisch** (snelle groei die later afvlakt)
+        """)
+
+        # --------------------------- Historische data (voorbeeld) ---------------------------
+        # (Je kunt dit eventueel vervangen door je echte data uit CSV/Excel)
+        years = np.arange(2015, 2025)
+        benzine = np.array([7500000, 7400000, 7250000, 7100000, 6900000, 6600000, 6300000, 5900000, 5500000, 5100000])
+        diesel = np.array([1800000, 1750000, 1680000, 1600000, 1500000, 1400000, 1300000, 1150000, 1000000, 900000])
+        elektrisch = np.array([20000, 40000, 80000, 150000, 300000, 500000, 750000, 1000000, 1300000, 1600000])
+
+        df_hist = pd.DataFrame({
+            "Jaar": years,
+            "Benzine": benzine,
+            "Diesel": diesel,
+            "Elektrisch": elektrisch
+        })
+
+        # --------------------------- Functies voor modelcurves ---------------------------
+        def exponential_decay(x, start, rate):
+            """Exponentieel afname model."""
+            return start * np.exp(-rate * (x - x[0]))
+
+        def logistic_growth(x, L, k, x0):
+            """Logistische groeifunctie: L = maximum, k = groeisnelheid, x0 = inflectiepunt."""
+            return L / (1 + np.exp(-k * (x - x0)))
+
+        # --------------------------- Modelparameters ---------------------------
+        future_years = np.arange(2025, 2051)
+
+        # Parameters kun je fine-tunen
+        benzine_params = (benzine[0], 0.035)       # Startwaarde, afnamesnelheid
+        diesel_params = (diesel[0], 0.05)          # Startwaarde, afnamesnelheid
+        elektrisch_params = (6500000, 0.35, 2028)  # Max, groeisnelheid, omslagpunt
+
+        # --------------------------- Voorspellingen berekenen ---------------------------
+        benzine_pred = exponential_decay(future_years, *benzine_params)
+        diesel_pred = exponential_decay(future_years, *diesel_params)
+        elektrisch_pred = logistic_growth(future_years, *elektrisch_params)
+
+        df_future = pd.DataFrame({
+            "Jaar": future_years,
+            "Benzine (voorspeld)": benzine_pred.astype(int),
+            "Diesel (voorspeld)": diesel_pred.astype(int),
+            "Elektrisch (voorspeld)": elektrisch_pred.astype(int)
+        })
+
+        # --------------------------- Interactieve opties ---------------------------
+        st.sidebar.header("⚙️ Instellingen")
+        show_benzine = st.sidebar.checkbox("Toon Benzine", True)
+        show_diesel = st.sidebar.checkbox("Toon Diesel", True)
+        show_elektrisch = st.sidebar.checkbox("Toon Elektrisch", True)
+
+        jaar_slider = st.sidebar.slider(
+            "Selecteer jaartalbereik",
+            min_value=int(years.min()),
+            max_value=2050,
+            value=(int(years.min()), 2050),
+            step=1
+        )
+
+        # --------------------------- Data combineren voor grafiek ---------------------------
+        df_all = pd.concat([df_hist, df_future.rename(columns={
+            "Benzine (voorspeld)": "Benzine",
+            "Diesel (voorspeld)": "Diesel",
+            "Elektrisch (voorspeld)": "Elektrisch"
+        })])
+
+        df_all = df_all[df_all["Jaar"].between(jaar_slider[0], jaar_slider[1])]
+
+        # --------------------------- Plot ---------------------------
+        fig, ax = plt.subplots(figsize=(10,6))
+        ax.set_facecolor("black")
+        fig.patch.set_facecolor("black")
+
+        if show_benzine:
+            ax.plot(df_all["Jaar"], df_all["Benzine"], 'o-', color='orange', label="Benzine")
+        if show_diesel:
+            ax.plot(df_all["Jaar"], df_all["Diesel"], 'o-', color='brown', label="Diesel")
+        if show_elektrisch:
+            ax.plot(df_all["Jaar"], df_all["Elektrisch"], 'o-', color='lime', label="Elektrisch")
+
+        ax.set_title("📈 Voorspelling voertuigsoorten t/m 2050", color='white', fontsize=14)
+        ax.set_xlabel("Jaar", color='white')
+        ax.set_ylabel("Aantal voertuigen", color='white')
+        ax.tick_params(colors='white')
+        ax.legend(facecolor="black", labelcolor='white')
+        st.pyplot(fig)
+
+        # --------------------------- Tabellen tonen ---------------------------
+        st.subheader("📅 Voorspelde waarden (selectie)")
+        st.dataframe(df_all.reset_index(drop=True))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 
 
 # ------------------- Pagina 3 --------------------------
@@ -1856,7 +1977,7 @@ elif page == "📌 Conclusie":
     st.markdown("""
     Dit dashboard biedt een **overzicht en analyse van laaddata voor elektrische voertuigen (EV's)**, met als doel inzicht te krijgen in het gebruik van laadpalen en het voorspellen van toekomstig laadgedrag.
 
-    ### Wat kun je doen met dit dashboard?
+    ### Uitleg Dashboard?
     - **Data bekijken:** je kunt de originele dataset inzien, filteren op kolommen en controleren op datakwaliteit.  
     - **Exploratieve Analyse:** met interactieve grafieken worden patronen en trends zichtbaar, zoals:
     - De verdeling van laadsessies per dag of maand  
@@ -1865,13 +1986,8 @@ elif page == "📌 Conclusie":
     - **Voorspelling:** via een getraind model (op basis van historische data) wordt een **voorspelling gedaan voor het energieverbruik** of laadgedrag.  
     Dit helpt om toekomstige belasting op het stroomnet beter te kunnen inschatten.
 
-    ### Hoe werkt het technisch?
-    - De gegevens worden ingeladen uit het bestand **`Charging_data.pkl`**.  
-    - Met behulp van **pandas** en **numpy** wordt de data opgeschoond en geanalyseerd.  
-    - Grafieken zijn gemaakt met **Plotly** en **Streamlit** voor een interactieve ervaring.  
-    - Een **machine learning model** (bijv. Random Forest of Linear Regression) voorspelt toekomstige waarden op basis van historische trends.
 
-    ### Belangrijkste inzichten
+    ### Belangrijkste Inzichten
     - Er zijn duidelijke **piekmomenten** te zien in het laden, meestal tijdens werkuren of aan het einde van de dag.  
     - Het **energieverbruik varieert per laadpunt**, afhankelijk van locatie en type voertuig.  
     - De voorspellingen geven een goede indicatie van toekomstige laadvraag, wat nuttig kan zijn voor **planning en capaciteit** van laadpalen.  
