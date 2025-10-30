@@ -1188,12 +1188,10 @@ elif page == "🚘 Voertuigen":
             if val is None or (isinstance(val, float) and np.isnan(val)):
                 return np.nan
 
-            # 0) Directe Timedelta
             if isinstance(val, pd.Timedelta):
                 hours = val.total_seconds() / 3600.0
                 return hours if 0 <= hours < 24 * 48 else np.nan
 
-            # 1) Probeer generiek met to_timedelta
             try:
                 td = pd.to_timedelta(str(val), errors="coerce")
                 if pd.notna(td):
@@ -1202,20 +1200,18 @@ elif page == "🚘 Voertuigen":
             except Exception:
                 pass
 
-            # 2) Getal → heuristiek
             if isinstance(val, (int, float)) and not isinstance(val, bool):
                 x = float(val)
                 if np.isnan(x):
                     return np.nan
-                if x > 1000:         # waarschijnlijk seconden
+                if x > 1000:
                     hours = x / 3600.0
-                elif 10 < x < 1000:  # waarschijnlijk minuten
+                elif 10 < x < 1000:
                     hours = x / 60.0
-                else:                # waarschijnlijk uren
+                else:
                     hours = x
                 return hours if 0 <= hours < 24 * 48 else np.nan
 
-            # 3) Strings normaliseren en parsen
             s = str(val).strip().lower()
             s = s.replace(",", ".")
             s = s.replace("±", "").replace("~", "").replace("≈", "")
@@ -1274,7 +1270,6 @@ elif page == "🚘 Voertuigen":
             except Exception:
                 return np.nan
 
-        # Toepassen
         df["laadtijd_uren"] = df["charging_duration"].apply(parse_duration_to_hours)
         df.loc[(df["laadtijd_uren"] < 0) | (df["laadtijd_uren"] >= 24 * 48), "laadtijd_uren"] = np.nan
         df["energie_kwh"] = pd.to_numeric(df["energy_delivered [kWh]"], errors="coerce")
@@ -1356,12 +1351,6 @@ elif page == "🚘 Voertuigen":
             fig = plot_bars(x_vals, grp["laadtijd_uren"], grp["energie_kwh"], x_title=f"Dagen in {nl_months[month]} {year}")
             st.plotly_chart(fig, use_container_width=True)
 
-        with st.expander("Toon geaggregeerde waarden"):
-            if keuze == "Alle maanden":
-                st.dataframe(grp.rename(columns={"maand_num": "maand"}))
-            else:
-                st.dataframe(grp.rename(columns={"dag": "dag van maand"}))
-
         # =======================
         # 📅 Vergelijk 2 dagen
         # =======================
@@ -1411,18 +1400,7 @@ elif page == "🚘 Voertuigen":
                     .reset_index()
                 )
 
-                st.dataframe(
-                    dag_agg.rename(
-                        columns={
-                            "datum": "Datum",
-                            "laadtijd_uren": "Laadtijd (uur)",
-                            "energie_kwh": "Energie (kWh)",
-                            "sessies": "Aantal sessies",
-                        }
-                    ),
-                    use_container_width=True,
-                )
-
+                # alleen grafieken behouden, geen tabel tonen
                 metrics = ["Laadtijd (uur)", "Energie (kWh)", "Aantal sessies"]
 
                 def vals_for_day(d):
@@ -1567,7 +1545,6 @@ elif page == "🚘 Voertuigen":
             yearly_cumu.index = yearly_cumu.index.to_period("Y").to_timestamp("Y")
             return yearly_cumu
 
-        # We gebruiken df_auto dat je elders al inlaadt via load_data()
         yearly_cumu = _ev_prepare_autos_yearly(df_auto)
         if yearly_cumu.empty:
             st.warning("Geen bruikbare data gevonden na 2010.")
@@ -1576,14 +1553,12 @@ elif page == "🚘 Voertuigen":
             last_hist_year = int(yearly_cumu.index.max().year)
             eindjaar = max(eindjaar, last_hist_year)
 
-            # Forecast per brandstof
             fc_list = []
             for col in yearly_cumu.columns:
                 fc = _ev_linear_forecast_yearly(yearly_cumu[col], horizon_year=eindjaar)
                 fc_list.append(fc.rename(col))
             forecast_yearly = pd.concat(fc_list, axis=1) if fc_list else pd.DataFrame()
 
-            # Plotly-figuur
             fig2 = go.Figure()
             for col in yearly_cumu.columns:
                 fig2.add_trace(go.Scatter(
@@ -1604,18 +1579,6 @@ elif page == "🚘 Voertuigen":
                 height=600
             )
             st.plotly_chart(fig2, use_container_width=True)
-
-            # Downloadknop
-            combined = pd.concat([yearly_cumu, forecast_yearly])
-            st.download_button(
-                "Download data (CSV)",
-                combined.to_csv(index_label="datum").encode("utf-8"),
-                file_name="cumulatief_per_jaar_met_voorspelling.csv",
-                mime="text/csv",
-                key="dl_ev_cumul_forecast"
-            )
-
-
 
 
 
