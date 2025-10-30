@@ -457,7 +457,7 @@ if page == "⚡️ Laadpalen":
                 gdf = gdf.to_crs(epsg=4326)
             return gdf
 
-        st.markdown("## 🗺️ Kaart van Nederland – Laadpalen per Provincie")
+        st.markdown("## Kaart van Nederland – Laadpalen per Provincie")
         st.markdown("---")
 
         with st.spinner("Provinciegrenzen laden..."):
@@ -1150,10 +1150,10 @@ elif page == "🚘 Voertuigen":
 
     else:
 
-        st.markdown("## 🚘 Elektrische Voertuigen & Laadtijden")
+        st.markdown("## Elektrische Voertuigen & Laadtijden")
         st.markdown("---")
 
-        st.title("Staafdiagram: Laadtijd (uur) en Energie (kWh)")
+        st.title("Laadtijd en Energie")
 
         # --- Data inladen (altijd lokaal, geen uploader) ---
         file_path = Path(os.getcwd()) / "Charging_data.pkl"
@@ -1456,7 +1456,7 @@ elif page == "🚘 Voertuigen":
                 fig_cmp.update_layout(
                     barmode="group",
                     bargap=0.15,
-                    title=dict(text="Vergelijking per metriek", font=dict(size=24), x=0.5, xanchor="center"),
+                    title=dict(text="Vergelijking per metriek", font=dict(size=18), x=0.5, xanchor="center"),
                     xaxis_title="Metriek",
                     yaxis_title="Waarde",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
@@ -1850,4 +1850,32 @@ elif page == "📊 Voorspellend model":
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📌 Conclusie":
-    st.write('hoi ')
+    # Conclusie & Uitleg Dashboard
+    st.header("Conclusie & Uitleg van het Dashboard")
+
+    st.markdown("""
+    Dit dashboard biedt een **overzicht en analyse van laaddata voor elektrische voertuigen (EV's)**, met als doel inzicht te krijgen in het gebruik van laadpalen en het voorspellen van toekomstig laadgedrag.
+
+    ### Wat kun je doen met dit dashboard?
+    - **Data bekijken:** je kunt de originele dataset inzien, filteren op kolommen en controleren op datakwaliteit.  
+    - **Exploratieve Analyse:** met interactieve grafieken worden patronen en trends zichtbaar, zoals:
+    - De verdeling van laadsessies per dag of maand  
+    - De gemiddelde laadtijd en verbruik per sessie  
+    - Het aantal unieke laadpunten of voertuigen  
+    - **Voorspelling:** via een getraind model (op basis van historische data) wordt een **voorspelling gedaan voor het energieverbruik** of laadgedrag.  
+    Dit helpt om toekomstige belasting op het stroomnet beter te kunnen inschatten.
+
+    ### Hoe werkt het technisch?
+    - De gegevens worden ingeladen uit het bestand **`Charging_data.pkl`**.  
+    - Met behulp van **pandas** en **numpy** wordt de data opgeschoond en geanalyseerd.  
+    - Grafieken zijn gemaakt met **Plotly** en **Streamlit** voor een interactieve ervaring.  
+    - Een **machine learning model** (bijv. Random Forest of Linear Regression) voorspelt toekomstige waarden op basis van historische trends.
+
+    ### Belangrijkste inzichten
+    - Er zijn duidelijke **piekmomenten** te zien in het laden, meestal tijdens werkuren of aan het einde van de dag.  
+    - Het **energieverbruik varieert per laadpunt**, afhankelijk van locatie en type voertuig.  
+    - De voorspellingen geven een goede indicatie van toekomstige laadvraag, wat nuttig kan zijn voor **planning en capaciteit** van laadpalen.  
+    - Daarnaast blijkt uit de analyse dat de **kosten om op te laden over het algemeen lager liggen in provincies met meer laadpalen**.  
+    Dit suggereert dat **meer concurrentie en beschikbaarheid** van laadpunten leidt tot **lagere gemiddelde laadkosten**.  
+    Omgekeerd liggen de kosten vaak **hoger in provincies met minder laadmogelijkheden**.
+    """)
