@@ -634,7 +634,7 @@ if page == "⚡️ Laadpalen":
                     display_lon = base_lon + 0.6
             else:
                 # Bij klik op laadpaal → iets naar links zodat marker perfect in beeld komt
-                display_lon = base_lon - 0.12  # 🔥 pas dit aan tussen -0.10 en -0.15 indien nodig
+                display_lon = base_lon - 0.02  # 🔥 pas dit aan tussen -0.10 en -0.15 indien nodig
 
             m = folium.Map(
                 location=[base_lat, display_lon],
