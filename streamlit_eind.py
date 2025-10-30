@@ -630,9 +630,9 @@ if page == "⚡️ Laadpalen":
             # Alleen gebruiken bij initiële weergave (geen geselecteerde laadpaal)
             if st.session_state.get("highlight_id") is None:
                 if provincie_keuze == "Heel Nederland":
-                    offset = 3.3   # lichte verschuiving naar rechts voor overzicht
+                    offset = 2.8   # lichte verschuiving naar rechts voor overzicht
                 else:
-                    offset = 0.9   # subtiele verschuiving voor provincies
+                    offset = 0.6   # subtiele verschuiving voor provincies
             else:
                 # Bij klik op specifieke laadpaal: altijd exact centreren
                 offset = 0.0
@@ -640,10 +640,11 @@ if page == "⚡️ Laadpalen":
 
 
             m = folium.Map(
-                location=[lat_center, lon_center + offset],
+                location=[lat_center, lon_center - offset],  # 👈 alleen dit plusje vervangen door een minteken!
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
+
 
 
 
