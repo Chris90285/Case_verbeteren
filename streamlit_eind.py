@@ -849,7 +849,7 @@ if page == "⚡️ Laadpalen":
 
             # --- Optie 3: Verband tussen beschikbaarheid en kosten ---
             elif keuze == "Verband tussen beschikbaarheid en kosten":
-                st.subheader("⚖️ Verband tussen beschikbaarheid en kosten per provincie")
+                st.subheader("Verband tussen beschikbaarheid en kosten per provincie")
 
                 # Basisgrafiek
                 kleuren = ["rgb(0,180,255)"] * len(df_agg)
@@ -865,6 +865,7 @@ if page == "⚡️ Laadpalen":
                     import statsmodels.api as sm
 
                     # Regressiemodel: kosten t.o.v. aandeel laadpalen
+                    df_agg = df_agg.reset_index(drop=True)  # <<< belangrijk
                     X = sm.add_constant(df_agg["Percentage"])
                     y = df_agg["Gemiddelde_kosten"]
                     model = sm.OLS(y, X, missing="drop").fit()
@@ -877,6 +878,7 @@ if page == "⚡️ Laadpalen":
                     # Optimale provincie volgens model (laagste voorspelde kosten)
                     idx_opt = df_agg["Voorspeld"].idxmin()
                     optimale_provincie = df_agg.loc[idx_opt, "Provincie"]
+
                     st.success(f"Optimale provincie: **{optimale_provincie}**")
 
                     kleuren[idx_opt] = "limegreen"
