@@ -625,20 +625,23 @@ if page == "⚡️ Laadpalen":
 
             base_lat, base_lon = st.session_state["map_center"]
 
-            # Offset alleen visueel toepassen, niet opslaan
+            # --- Offset enkel visueel toepassen ---
             if st.session_state.get("highlight_id") is None:
+                # Initieel (geen selectie) → lichte verschuiving voor beter overzicht
                 if provincie_keuze == "Heel Nederland":
                     display_lon = base_lon + 2.8
                 else:
                     display_lon = base_lon + 0.6
             else:
-                display_lon = base_lon  # exact centreren bij highlight
+                # Bij klik op laadpaal → iets naar links zodat marker perfect in beeld komt
+                display_lon = base_lon - 0.12  # 🔥 pas dit aan tussen -0.10 en -0.15 indien nodig
 
             m = folium.Map(
                 location=[base_lat, display_lon],
                 zoom_start=st.session_state["zoom_level"],
                 tiles="OpenStreetMap"
             )
+
 
 
 
