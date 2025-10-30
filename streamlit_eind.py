@@ -637,7 +637,7 @@ if page == "⚡️ Laadpalen":
                 if provincie_keuze == "Heel Nederland":
                     display_lon = base_lon + 0.01  
                 else:
-                    display_lon = base_lon + 0.04
+                    display_lon = base_lon + 0.12
 
 
             m = folium.Map(
