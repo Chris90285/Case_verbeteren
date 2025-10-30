@@ -740,6 +740,7 @@ if page == "⚡️ Laadpalen":
                 "UsageCostClean"
             ] = np.nan
 
+            # Power kolom bepalen
             if "PowerKW" in df_all.columns:
                 df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
             elif "Connections.PowerKW" in df_all.columns:
@@ -749,6 +750,7 @@ if page == "⚡️ Laadpalen":
             else:
                 df_all["PowerKW_clean"] = np.nan
 
+            # Provincie mapping
             provincie_mapping = {
                 "Groningen": "Groningen",
                 "Friesland": "Friesland",
@@ -771,6 +773,7 @@ if page == "⚡️ Laadpalen":
             df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
             df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
 
+            # Aggregatie per provincie
             df_agg = (
                 df_all.groupby("Provincie")
                 .agg(
@@ -784,12 +787,17 @@ if page == "⚡️ Laadpalen":
             df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
             df_agg = df_agg.sort_values("Percentage", ascending=False)
 
-            # Dropdown met extra optie
+            # Dropdown met 3 opties
             keuze = st.selectbox(
                 "📈 Kies welke verdeling of verband je wilt zien:",
-                ["Verdeling laadpalen per provincie (%)", "Gemiddelde kosten per provincie", "Verband tussen beschikbaarheid en kosten"]
+                [
+                    "Verdeling laadpalen per provincie (%)",
+                    "Gemiddelde kosten per provincie",
+                    "Verband tussen beschikbaarheid en kosten"
+                ]
             )
 
+            # --- Optie 1: Verdeling laadpalen ---
             if keuze == "Verdeling laadpalen per provincie (%)":
                 fig = px.bar(
                     df_agg,
@@ -800,7 +808,9 @@ if page == "⚡️ Laadpalen":
                 )
                 fig.update_traces(textposition="outside")
                 fig.update_layout(yaxis_title="Percentage van totaal (%)")
+                st.plotly_chart(fig, use_container_width=True)
 
+            # --- Optie 2: Gemiddelde kosten ---
             elif keuze == "Gemiddelde kosten per provincie":
                 fig = px.bar(
                     df_agg,
@@ -809,11 +819,13 @@ if page == "⚡️ Laadpalen":
                     title="Gemiddelde kosten per provincie (€ per kWh)"
                 )
                 fig.update_layout(yaxis_title="€ per kWh")
+                st.plotly_chart(fig, use_container_width=True)
 
+            # --- Optie 3: Verband tussen beschikbaarheid en kosten ---
             elif keuze == "Verband tussen beschikbaarheid en kosten":
                 fig = go.Figure()
 
-                # Balken = aandeel laadpalen
+                # Balken: aandeel laadpalen
                 fig.add_trace(go.Bar(
                     x=df_agg["Provincie"],
                     y=df_agg["Percentage"],
@@ -823,7 +835,7 @@ if page == "⚡️ Laadpalen":
                     yaxis="y1"
                 ))
 
-                # Lijn = gemiddelde kosten
+                # Lijn: gemiddelde kosten
                 fig.add_trace(go.Scatter(
                     x=df_agg["Provincie"],
                     y=df_agg["Gemiddelde_kosten"],
@@ -855,15 +867,13 @@ if page == "⚡️ Laadpalen":
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
-                st.caption("Je ziet dat provincies met een groter aandeel laadpalen (blauwe balken) "
-                        "gemiddeld lagere laadtarieven hebben (rode lijn).")
-
-            fig.update_layout(xaxis_title="Provincie", showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+                st.caption(
+                    "Je ziet dat provincies met een groter aandeel laadpalen (blauwe balken) "
+                    "gemiddeld lagere laadtarieven hebben (rode lijn)."
+                )
 
         else:
             st.warning("Kon geen landelijke data laden voor de grafiek.")
-
 
 
 
