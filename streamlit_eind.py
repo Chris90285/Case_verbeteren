@@ -1147,7 +1147,471 @@ elif page == "🚘 Voertuigen":
     #------------NIEUWE PAGINA 2--------------
 
     else:
-        st.write('hey')
+
+        st.markdown("## 🚘 Elektrische Voertuigen & Laadtijden")
+        st.markdown("---")
+
+        st.title("Staafdiagram: Laadtijd (uur) en Energie (kWh)")
+
+        # --- Data inladen (altijd lokaal, geen uploader) ---
+        file_path = Path(__file__).parent / "Charging_data.pkl"
+        try:
+            df = pd.read_pickle(file_path)
+        except Exception as e:
+            st.error(
+                "Kan 'Charging_data.pkl' niet laden. Plaats het bestand in dezelfde map als dit script.\n\n"
+                f"Foutmelding: {e}"
+            )
+            st.stop()
+
+        # --- Verwachte kolommen checken / voorbereiden ---
+        expected = {"start_time", "charging_duration", "energy_delivered [kWh]"}
+        missing = expected - set(df.columns)
+        if missing:
+            st.error(f"Ontbrekende kolommen in dataset: {missing}.")
+            st.stop()
+
+        # Types converteren indien nodig
+        if not np.issubdtype(df["start_time"].dtype, np.datetime64):
+            df["start_time"] = pd.to_datetime(df["start_time"], errors="coerce")
+        if "exit_time" in df.columns and not np.issubdtype(df["exit_time"].dtype, np.datetime64):
+            df["exit_time"] = pd.to_datetime(df["exit_time"], errors="coerce")
+
+        # ---- Laadtijd in uren: ALLEEN uit 'charging_duration' met robuuste parser ----
+        def parse_duration_to_hours(val) -> float:
+            import re
+            import numpy as np
+            import pandas as pd
+
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                return np.nan
+
+            # 0) Directe Timedelta
+            if isinstance(val, pd.Timedelta):
+                hours = val.total_seconds() / 3600.0
+                return hours if 0 <= hours < 24 * 48 else np.nan
+
+            # 1) Probeer generiek met to_timedelta
+            try:
+                td = pd.to_timedelta(str(val), errors="coerce")
+                if pd.notna(td):
+                    hours = td.total_seconds() / 3600.0
+                    return hours if 0 <= hours < 24 * 48 else np.nan
+            except Exception:
+                pass
+
+            # 2) Getal → heuristiek
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                x = float(val)
+                if np.isnan(x):
+                    return np.nan
+                if x > 1000:         # waarschijnlijk seconden
+                    hours = x / 3600.0
+                elif 10 < x < 1000:  # waarschijnlijk minuten
+                    hours = x / 60.0
+                else:                # waarschijnlijk uren
+                    hours = x
+                return hours if 0 <= hours < 24 * 48 else np.nan
+
+            # 3) Strings normaliseren en parsen
+            s = str(val).strip().lower()
+            s = s.replace(",", ".")
+            s = s.replace("±", "").replace("~", "").replace("≈", "")
+            s = re.sub(r"\s+", " ", s)
+
+            specials = {
+                "an hour": 1.0, "a hour": 1.0, "one hour": 1.0,
+                "half hour": 0.5, "half an hour": 0.5, "half uur": 0.5,
+                "kwartier": 0.25, "quarter hour": 0.25,
+                "3/4 hour": 0.75, "¾ hour": 0.75,
+                "30 minutes": 0.5, "30 minute": 0.5, "an half hour": 0.5,
+                "an minute": 1.0/60.0,
+            }
+            if s in specials:
+                return specials[s]
+
+            m_iso = re.match(r"^pt(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$", s)
+            if m_iso:
+                h = float(m_iso.group(1) or 0)
+                m = float(m_iso.group(2) or 0)
+                sec = float(m_iso.group(3) or 0)
+                hours = h + m/60.0 + sec/3600.0
+                return hours if 0 <= hours < 24 * 48 else np.nan
+
+            parts = re.findall(
+                r"(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|uur|uren|m|min|mins|minute|minutes|s|sec|secs|second|seconds)",
+                s
+            )
+            if parts:
+                total_hours = 0.0
+                for num, unit in parts:
+                    v = float(num)
+                    if unit in ["h", "hr", "hrs", "hour", "hours", "uur", "uren"]:
+                        total_hours += v
+                    elif unit in ["m", "min", "mins", "minute", "minutes"]:
+                        total_hours += v / 60.0
+                    elif unit in ["s", "sec", "secs", "second", "seconds"]:
+                        total_hours += v / 3600.0
+                return total_hours if 0 <= total_hours < 24 * 48 else np.nan
+
+            m_simple = re.match(r"^(\d+(?:\.\d+)?)(h|m|s)$", s)
+            if m_simple:
+                v = float(m_simple.group(1)); u = m_simple.group(2)
+                hours = v if u == "h" else v/60.0 if u == "m" else v/3600.0
+                return hours if 0 <= hours < 24 * 48 else np.nan
+
+            try:
+                x = float(s)
+                if x > 1000:
+                    hours = x / 3600.0
+                elif 10 < x < 1000:
+                    hours = x / 60.0
+                else:
+                    hours = x
+                return hours if 0 <= hours < 24 * 48 else np.nan
+            except Exception:
+                return np.nan
+
+        # Toepassen
+        df["laadtijd_uren"] = df["charging_duration"].apply(parse_duration_to_hours)
+        df.loc[(df["laadtijd_uren"] < 0) | (df["laadtijd_uren"] >= 24 * 48), "laadtijd_uren"] = np.nan
+        df["energie_kwh"] = pd.to_numeric(df["energy_delivered [kWh]"], errors="coerce")
+
+        # Extra tijdsdimensies
+        df["jaar"] = df["start_time"].dt.year
+        df["maand_num"] = df["start_time"].dt.month
+        df["dag"] = df["start_time"].dt.day
+
+        nl_months = {
+            1: "januari", 2: "februari", 3: "maart", 4: "april", 5: "mei", 6: "juni", 7: "juli",
+            8: "augustus", 9: "september", 10: "oktober", 11: "november", 12: "december"
+        }
+
+        months_available_df = (
+            df.dropna(subset=["start_time"])
+            .sort_values(["jaar", "maand_num"])
+            .drop_duplicates(["jaar", "maand_num"])[["jaar", "maand_num"]]
+            .reset_index(drop=True)
+        )
+        month_keys = list(months_available_df.itertuples(index=False, name=None))
+        month_labels = [f"{nl_months[m]} {y}" for (y, m) in month_keys]
+
+        keuze = st.selectbox("Kies maand (of 'Alle maanden'):", options=["Alle maanden"] + month_labels, index=0)
+
+        def plot_bars(x_values, laadtijd, energie, x_title):
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=x_values, y=laadtijd, name="Laadtijd (uur)",
+                yaxis="y", offsetgroup="laadtijd",
+                hovertemplate="%{x}<br>Laadtijd: %{y:.2f} uur<extra></extra>",
+            ))
+            fig.add_trace(go.Bar(
+                x=x_values, y=energie, name="Energie (kWh)",
+                yaxis="y2", offsetgroup="energie",
+                hovertemplate="%{x}<br>Energie: %{y:.2f} kWh<extra></extra>",
+            ))
+            fig.update_layout(
+                barmode="group",
+                bargap=0.15,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                margin=dict(l=10, r=10, t=10, b=10),
+                hovermode="x unified",
+                xaxis=dict(title=x_title, type="category"),
+                yaxis=dict(title="Laadtijd (uur)"),
+                yaxis2=dict(title="Energie (kWh)", overlaying="y", side="right"),
+            )
+            return fig
+
+        if keuze == "Alle maanden":
+            grp = (
+                df
+                .groupby(["jaar", "maand_num"], dropna=True)
+                .agg(
+                    laadtijd_uren=("laadtijd_uren", "sum"),
+                    energie_kwh=("energie_kwh", "sum"),
+                )
+                .reset_index()
+                .sort_values(["jaar", "maand_num"])
+            )
+            x_vals = [f"{nl_months[m]} {y}" for y, m in zip(grp["jaar"], grp["maand_num"])]
+            fig = plot_bars(x_vals, grp["laadtijd_uren"], grp["energie_kwh"], x_title="Maanden")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            idx = month_labels.index(keuze)
+            year, month = month_keys[idx]
+            df_sel = df[(df["jaar"] == year) & (df["maand_num"] == month)]
+            grp = (
+                df_sel
+                .groupby(["jaar", "maand_num", "dag"], dropna=True)
+                .agg(
+                    laadtijd_uren=("laadtijd_uren", "sum"),
+                    energie_kwh=("energie_kwh", "sum"),
+                )
+                .reset_index()
+                .sort_values(["dag"])
+            )
+            x_vals = [str(d) for d in grp["dag"].tolist()]
+            fig = plot_bars(x_vals, grp["laadtijd_uren"], grp["energie_kwh"], x_title=f"Dagen in {nl_months[month]} {year}")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("Toon geaggregeerde waarden"):
+            if keuze == "Alle maanden":
+                st.dataframe(grp.rename(columns={"maand_num": "maand"}))
+            else:
+                st.dataframe(grp.rename(columns={"dag": "dag van maand"}))
+
+        # =======================
+        # 📅 Vergelijk 2 dagen
+        # =======================
+        st.markdown("### 📅 Vergelijk twee dagen")
+        df["datum"] = df["start_time"].dt.date
+        available_dates = sorted(d for d in df["datum"].dropna().unique())
+
+        if len(available_dates) < 2:
+            st.info("Er zijn minder dan twee dagen met data om te vergelijken.")
+        else:
+            default_d1 = available_dates[-2]
+            default_d2 = available_dates[-1]
+
+            c1, c2, c3 = st.columns([1, 1, 2])
+            with c1:
+                dag1 = st.date_input(
+                    "Dag 1",
+                    value=default_d1,
+                    min_value=available_dates[0],
+                    max_value=available_dates[-1],
+                    format="YYYY-MM-DD",
+                    key="compare_day1",
+                )
+            with c2:
+                dag2 = st.date_input(
+                    "Dag 2",
+                    value=default_d2,
+                    min_value=available_dates[0],
+                    max_value=available_dates[-1],
+                    format="YYYY-MM-DD",
+                    key="compare_day2",
+                )
+
+            keuze_dagen = [dag1, dag2]
+            df_sel = df[df["datum"].isin(keuze_dagen)].copy()
+
+            if df_sel.empty or len(set(keuze_dagen)) < 2:
+                st.warning("Kies twee verschillende dagen met beschikbare data.")
+            else:
+                dag_agg = (
+                    df_sel.groupby("datum", dropna=True)
+                    .agg(
+                        laadtijd_uren=("laadtijd_uren", "sum"),
+                        energie_kwh=("energie_kwh", "sum"),
+                        sessies=("energie_kwh", "count"),
+                    )
+                    .reset_index()
+                )
+
+                st.dataframe(
+                    dag_agg.rename(
+                        columns={
+                            "datum": "Datum",
+                            "laadtijd_uren": "Laadtijd (uur)",
+                            "energie_kwh": "Energie (kWh)",
+                            "sessies": "Aantal sessies",
+                        }
+                    ),
+                    use_container_width=True,
+                )
+
+                metrics = ["Laadtijd (uur)", "Energie (kWh)", "Aantal sessies"]
+
+                def vals_for_day(d):
+                    row = dag_agg.loc[dag_agg["datum"] == d]
+                    if row.empty:
+                        return [0, 0, 0]
+                    return [
+                        float(row["laadtijd_uren"].iloc[0] or 0),
+                        float(row["energie_kwh"].iloc[0] or 0),
+                        float(row["sessies"].iloc[0] or 0),
+                    ]
+
+                y_d1 = vals_for_day(dag1)
+                y_d2 = vals_for_day(dag2)
+
+                fig_cmp = go.Figure()
+                fig_cmp.add_trace(
+                    go.Bar(
+                        x=metrics, y=y_d1, name=str(dag1),
+                        offsetgroup="d1",
+                        hovertemplate="%{x}<br>%{y:.2f}<extra>" + str(dag1) + "</extra>",
+                    )
+                )
+                fig_cmp.add_trace(
+                    go.Bar(
+                        x=metrics, y=y_d2, name=str(dag2),
+                        offsetgroup="d2",
+                        hovertemplate="%{x}<br>%{y:.2f}<extra>" + str(dag2) + "</extra>",
+                    )
+                )
+                fig_cmp.update_layout(
+                    barmode="group",
+                    bargap=0.15,
+                    title=dict(text="Vergelijking per metriek", font=dict(size=24), x=0.5, xanchor="center"),
+                    xaxis_title="Metriek",
+                    yaxis_title="Waarde",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig_cmp, use_container_width=True)
+
+                with st.expander("Detail: per uur binnen de twee dagen"):
+                    df_detail = df_sel.copy()
+                    df_detail["uur"] = df_detail["start_time"].dt.hour
+
+                    per_uur = (
+                        df_detail.groupby(["datum", "uur"])
+                        .agg(
+                            laadtijd_uren=("laadtijd_uren", "sum"),
+                            energie_kwh=("energie_kwh", "sum"),
+                        )
+                        .reset_index()
+                        .sort_values(["datum", "uur"])
+                    )
+
+                    fig_uur_lt = go.Figure()
+                    for d in keuze_dagen:
+                        ddata = per_uur[per_uur["datum"] == d]
+                        fig_uur_lt.add_trace(
+                            go.Scatter(x=ddata["uur"], y=ddata["laadtijd_uren"], mode="lines+markers", name=f"Laadtijd - {d}")
+                        )
+                    fig_uur_lt.update_layout(
+                        title="Laadtijd per uur",
+                        xaxis_title="Uur van de dag",
+                        yaxis_title="Laadtijd (uur)",
+                        hovermode="x unified",
+                        margin=dict(l=10, r=10, t=30, b=10),
+                    )
+                    st.plotly_chart(fig_uur_lt, use_container_width=True)
+
+                    fig_uur_en = go.Figure()
+                    for d in keuze_dagen:
+                        ddata = per_uur[per_uur["datum"] == d]
+                        fig_uur_en.add_trace(
+                            go.Scatter(x=ddata["uur"], y=ddata["energie_kwh"], mode="lines+markers", name=f"Energie - {d}")
+                        )
+                    fig_uur_en.update_layout(
+                        title="Energie per uur",
+                        xaxis_title="Uur van de dag",
+                        yaxis_title="Energie (kWh)",
+                        hovermode="x unified",
+                        margin=dict(l=10, r=10, t=30, b=10),
+                    )
+                    st.plotly_chart(fig_uur_en, use_container_width=True)
+
+        # ======================================================
+        # 2e GRAFIEK: Cumulatief per jaar per brandstof + forecast t/m 2050
+        # ======================================================
+        st.markdown("---")
+        st.subheader("Cumulatief aantal voertuigen per jaar per brandstof (historisch + voorspelling)")
+
+        def _ev_linear_forecast_yearly(series_y: pd.Series, horizon_year: int = 2050) -> pd.Series:
+            if series_y.empty:
+                return pd.Series(dtype=float)
+            years_hist = np.array([d.year for d in series_y.index])
+            vals_hist = series_y.values.astype(float)
+            mask = ~np.isnan(vals_hist)
+            years_hist, vals_hist = years_hist[mask], vals_hist[mask]
+            if len(vals_hist) < 2:
+                last_year = int(series_y.index.max().year) if len(series_y) else 2025
+                future_years = np.arange(last_year + 1, horizon_year + 1)
+                last_val = float(vals_hist[-1]) if len(vals_hist) else 0.0
+                preds = np.full_like(future_years, last_val, dtype=float)
+                return pd.Series(preds, index=pd.to_datetime([f"{y}-12-31" for y in future_years]))
+            m, b = np.polyfit(years_hist, vals_hist, 1)
+            last_year = int(series_y.index.max().year)
+            future_years = np.arange(last_year + 1, horizon_year + 1)
+            preds = m * future_years + b
+            preds = np.maximum.accumulate(preds)
+            preds = np.maximum(preds, vals_hist[-1])
+            return pd.Series(preds, index=pd.to_datetime([f"{y}-12-31" for y in future_years]))
+
+        def _ev_prepare_autos_yearly(df_autos: pd.DataFrame) -> pd.DataFrame:
+            data = df_autos.copy()
+            if "Type" not in data.columns:
+                def _bepaal_type(merk, uitvoering):
+                    u = str(uitvoering).upper()
+                    m = str(merk).upper()
+                    elektrische_prefixen = [
+                        "FA1FA1CZ","3EER","3EDF","3EDE","2EER","2EDF","2EDE","E11","0AW5","QE2QE2G1","QE1QE1G1","HE1HE1G1","FA1FA1MD"
+                    ]
+                    if ("BMW I" in m or "PORSCHE" in m or any(u.startswith(p) for p in elektrische_prefixen) or "EV" in u):
+                        return "Elektrisch"
+                    if ("DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D")):
+                        return "Diesel"
+                    return "Benzine"
+                data["Type"] = data.apply(lambda r: _bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1)
+
+            s = data["Datum eerste toelating"].astype(str).str.split(".").str[0]
+            dt = pd.to_datetime(s, format="%Y%m%d", errors="coerce")
+            dt = dt.fillna(pd.to_datetime(s, errors="coerce"))
+            data = data.assign(_datum=dt).dropna(subset=["_datum"])
+            data = data[data["_datum"].dt.year > 2010]
+
+            monthly = (
+                data.assign(_maand=data["_datum"].dt.to_period("M").dt.to_timestamp())
+                    .groupby(["_maand","Type"]).size().unstack(fill_value=0).sort_index()
+            )
+            monthly_cumu = monthly.cumsum()
+            yearly_cumu = monthly_cumu.resample("Y").last().fillna(method="ffill")
+            yearly_cumu.index = yearly_cumu.index.to_period("Y").to_timestamp("Y")
+            return yearly_cumu
+
+        # We gebruiken df_auto dat je elders al inlaadt via load_data()
+        yearly_cumu = _ev_prepare_autos_yearly(df_auto)
+        if yearly_cumu.empty:
+            st.warning("Geen bruikbare data gevonden na 2010.")
+        else:
+            eindjaar = st.slider("Voorspellen tot jaar", 2025, 2050, 2050, key="ev_forecast_endyear")
+            last_hist_year = int(yearly_cumu.index.max().year)
+            eindjaar = max(eindjaar, last_hist_year)
+
+            # Forecast per brandstof
+            fc_list = []
+            for col in yearly_cumu.columns:
+                fc = _ev_linear_forecast_yearly(yearly_cumu[col], horizon_year=eindjaar)
+                fc_list.append(fc.rename(col))
+            forecast_yearly = pd.concat(fc_list, axis=1) if fc_list else pd.DataFrame()
+
+            # Plotly-figuur
+            fig2 = go.Figure()
+            for col in yearly_cumu.columns:
+                fig2.add_trace(go.Scatter(
+                    x=yearly_cumu.index, y=yearly_cumu[col],
+                    name=f"{col} – historisch", mode="lines"
+                ))
+            if not forecast_yearly.empty:
+                for col in forecast_yearly.columns:
+                    fig2.add_trace(go.Scatter(
+                        x=forecast_yearly.index, y=forecast_yearly[col],
+                        name=f"{col} – voorspelling", mode="lines", line=dict(dash="dash")
+                    ))
+            fig2.update_layout(
+                title=f"Cumulatief per jaar per brandstof (voorspelling t/m {eindjaar})",
+                xaxis_title="Jaar",
+                yaxis_title="Cumulatief aantal voertuigen",
+                hovermode="x unified",
+                height=600
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+
+            # Downloadknop
+            combined = pd.concat([yearly_cumu, forecast_yearly])
+            st.download_button(
+                "Download data (CSV)",
+                combined.to_csv(index_label="datum").encode("utf-8"),
+                file_name="cumulatief_per_jaar_met_voorspelling.csv",
+                mime="text/csv",
+                key="dl_ev_cumul_forecast"
+            )
 
 
 
