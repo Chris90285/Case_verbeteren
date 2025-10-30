@@ -1486,102 +1486,141 @@ elif page == "🚘 Voertuigen":
                         margin=dict(l=10, r=10, t=30, b=10),
                     )
                     st.plotly_chart(fig_uur_en, use_container_width=True)
+        #MODEL
 
-        # ======================================================
-        # 2e GRAFIEK: Cumulatief per jaar per brandstof + forecast t/m 2050
-        # ======================================================
-        st.markdown("---")
-        st.subheader("Cumulatief aantal voertuigen per jaar per brandstof (historisch + voorspelling)")
+        with tab2:
+            st.subheader("📈 Model 2 – Realistisch groeimodel tot 2050")
 
-        def _ev_linear_forecast_yearly(series_y: pd.Series, horizon_year: int = 2050) -> pd.Series:
-            if series_y.empty:
-                return pd.Series(dtype=float)
-            years_hist = np.array([d.year for d in series_y.index])
-            vals_hist = series_y.values.astype(float)
-            mask = ~np.isnan(vals_hist)
-            years_hist, vals_hist = years_hist[mask], vals_hist[mask]
-            if len(vals_hist) < 2:
-                last_year = int(series_y.index.max().year) if len(series_y) else 2025
-                future_years = np.arange(last_year + 1, horizon_year + 1)
-                last_val = float(vals_hist[-1]) if len(vals_hist) else 0.0
-                preds = np.full_like(future_years, last_val, dtype=float)
-                return pd.Series(preds, index=pd.to_datetime([f"{y}-12-31" for y in future_years]))
-            m, b = np.polyfit(years_hist, vals_hist, 1)
-            last_year = int(series_y.index.max().year)
-            future_years = np.arange(last_year + 1, horizon_year + 1)
-            preds = m * future_years + b
-            preds = np.maximum.accumulate(preds)
-            preds = np.maximum(preds, vals_hist[-1])
-            return pd.Series(preds, index=pd.to_datetime([f"{y}-12-31" for y in future_years]))
+            def _ev_prepare_autos_yearly(data: pd.DataFrame) -> pd.DataFrame:
+                """Verwerkt de RDW-data naar jaarlijkse cumulatieve tellingen per brandstoftype."""
+                if "Type" not in data.columns:
+                    def _bepaal_type(m, u):
+                        elektrische_prefixen = ["TESLA", "VOLVO E", "VW ID", "BMW I", "NISSAN LEAF",
+                                                "RENAULT ZOE", "KIA EV", "HYUNDAI IONIQ", "AUDI E",
+                                                "MERCEDES EQ", "PEUGEOT E", "OPEL E", "SKODA ENYAQ",
+                                                "MG4", "FIAT 500E", "HONDA E", "CUPRA BORN", "POLESTAR",
+                                                "BYD", "XPENG", "SMART EQ", "MINI ELECTRIC"]
+                        if ("BMW I" in m or "PORSCHE" in m or any(u.startswith(p) for p in elektrische_prefixen) or "EV" in u):
+                            return "Elektrisch"
+                        if ("DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D")):
+                            return "Diesel"
+                        return "Benzine"
 
-        def _ev_prepare_autos_yearly(df_autos: pd.DataFrame) -> pd.DataFrame:
-            data = df_autos.copy()
-            if "Type" not in data.columns:
-                def _bepaal_type(merk, uitvoering):
-                    u = str(uitvoering).upper()
-                    m = str(merk).upper()
-                    elektrische_prefixen = [
-                        "FA1FA1CZ","3EER","3EDF","3EDE","2EER","2EDF","2EDE","E11","0AW5","QE2QE2G1","QE1QE1G1","HE1HE1G1","FA1FA1MD"
-                    ]
-                    if ("BMW I" in m or "PORSCHE" in m or any(u.startswith(p) for p in elektrische_prefixen) or "EV" in u):
-                        return "Elektrisch"
-                    if ("DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D")):
-                        return "Diesel"
-                    return "Benzine"
-                data["Type"] = data.apply(lambda r: _bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1)
+                    data["Type"] = data.apply(lambda r: _bepaal_type(r.get("Merk", ""), r.get("Uitvoering", "")), axis=1)
 
-            s = data["Datum eerste toelating"].astype(str).str.split(".").str[0]
-            dt = pd.to_datetime(s, format="%Y%m%d", errors="coerce")
-            dt = dt.fillna(pd.to_datetime(s, errors="coerce"))
-            data = data.assign(_datum=dt).dropna(subset=["_datum"])
-            data = data[data["_datum"].dt.year > 2010]
+                # Zorg dat de datums correct geparsed worden
+                s = data["Datum eerste toelating"].astype(str).str.split(".").str[0]
+                dt = pd.to_datetime(s, format="%Y%m%d", errors="coerce")
+                dt = dt.fillna(pd.to_datetime(s, errors="coerce"))
+                data = data.assign(_datum=dt).dropna(subset=["_datum"])
+                data = data[data["_datum"].dt.year > 2010]
 
-            monthly = (
-                data.assign(_maand=data["_datum"].dt.to_period("M").dt.to_timestamp())
-                    .groupby(["_maand","Type"]).size().unstack(fill_value=0).sort_index()
-            )
-            monthly_cumu = monthly.cumsum()
-            yearly_cumu = monthly_cumu.resample("Y").last().fillna(method="ffill")
-            yearly_cumu.index = yearly_cumu.index.to_period("Y").to_timestamp("Y")
-            return yearly_cumu
+                # Maandelijkse en cumulatieve telling
+                monthly = (
+                    data.assign(_maand=data["_datum"].dt.to_period("M").dt.to_timestamp())
+                        .groupby(["_maand", "Type"]).size().unstack(fill_value=0).sort_index()
+                )
+                monthly_cumu = monthly.cumsum()
+                yearly_cumu = monthly_cumu.resample("Y").last().fillna(method="ffill")
+                yearly_cumu.index = yearly_cumu.index.to_period("Y").to_timestamp("Y")
+                return yearly_cumu
 
-        yearly_cumu = _ev_prepare_autos_yearly(df_auto)
-        if yearly_cumu.empty:
-            st.warning("Geen bruikbare data gevonden na 2010.")
-        else:
-            eindjaar = st.slider("Voorspellen tot jaar", 2025, 2050, 2050, key="ev_forecast_endyear")
-            last_hist_year = int(yearly_cumu.index.max().year)
-            eindjaar = max(eindjaar, last_hist_year)
+            def _ev_forecast_realistic(series: pd.Series, eindjaar: int) -> pd.Series:
+                """
+                Maakt een realistische voorspelling per brandstoftype:
+                - Elektrisch: logistische groei (snelle toename, afvlakking)
+                - Benzine: afvlakkende groei
+                - Diesel: lichte daling of stabilisatie
+                """
+                last_year = int(series.index.max().year)
+                start_val = float(series.iloc[-1])
+                jaren = np.arange(last_year + 1, eindjaar + 1)
 
-            fc_list = []
-            for col in yearly_cumu.columns:
-                fc = _ev_linear_forecast_yearly(yearly_cumu[col], horizon_year=eindjaar)
-                fc_list.append(fc.rename(col))
-            forecast_yearly = pd.concat(fc_list, axis=1) if fc_list else pd.DataFrame()
+                # Bepaal type
+                naam = series.name.lower()
+                voorspeld = []
 
-            fig2 = go.Figure()
-            for col in yearly_cumu.columns:
-                fig2.add_trace(go.Scatter(
-                    x=yearly_cumu.index, y=yearly_cumu[col],
-                    name=f"{col} – historisch", mode="lines"
-                ))
-            if not forecast_yearly.empty:
-                for col in forecast_yearly.columns:
+                if "elektr" in naam:
+                    # Logistische groei met verzadiging rond 2050
+                    K = start_val * 6.5  # maximaal aantal (ongeveer verzadiging)
+                    r = 0.18  # groeisnelheid
+                    t = np.arange(len(series) + len(jaren))
+                    t0 = len(series)  # startmoment voorspelling
+                    logistic = K / (1 + np.exp(-r * (t - t0)))
+                    voorspeld = logistic[t0:]
+                elif "benz" in naam:
+                    # Langzaam afvlakkende groei
+                    groeifactor = 0.015  # per jaar afnemende groei
+                    waardes = [start_val]
+                    for i in range(len(jaren)):
+                        groei = max(0.002, groeifactor - i * 0.0005)
+                        waardes.append(waardes[-1] * (1 + groei))
+                    voorspeld = waardes[1:]
+                elif "diesel" in naam:
+                    # Stabiel tot 2030, daarna afname
+                    waardes = [start_val]
+                    for jaar in jaren:
+                        if jaar < 2030:
+                            factor = 0.995
+                        else:
+                            factor = 0.97  # jaarlijkse afname na 2030
+                        waardes.append(waardes[-1] * factor)
+                    voorspeld = waardes[1:]
+                else:
+                    # Fallback: vlakke trend
+                    voorspeld = np.full(len(jaren), start_val)
+
+                voorspelling = pd.Series(voorspeld, index=pd.to_datetime(jaren, format="%Y"), name=series.name)
+                return voorspelling
+
+            yearly_cumu = _ev_prepare_autos_yearly(df_auto)
+
+            if yearly_cumu.empty:
+                st.warning("Geen bruikbare data gevonden na 2010.")
+            else:
+                eindjaar = st.slider("Voorspellen tot jaar", 2025, 2050, 2050, key="ev_forecast_endyear")
+                last_hist_year = int(yearly_cumu.index.max().year)
+                eindjaar = max(eindjaar, last_hist_year)
+
+                fc_list = []
+                for col in yearly_cumu.columns:
+                    fc = _ev_forecast_realistic(yearly_cumu[col], eindjaar)
+                    fc_list.append(fc.rename(col))
+                forecast_yearly = pd.concat(fc_list, axis=1) if fc_list else pd.DataFrame()
+
+                # Combineer historische + voorspelde data
+                fig2 = go.Figure()
+
+                # Historische lijnen
+                for col in yearly_cumu.columns:
                     fig2.add_trace(go.Scatter(
-                        x=forecast_yearly.index, y=forecast_yearly[col],
-                        name=f"{col} – voorspelling", mode="lines", line=dict(dash="dash")
+                        x=yearly_cumu.index,
+                        y=yearly_cumu[col],
+                        name=f"{col} – historisch",
+                        mode="lines"
                     ))
-            fig2.update_layout(
-                title=f"Cumulatief per jaar per brandstof (voorspelling t/m {eindjaar})",
-                xaxis_title="Jaar",
-                yaxis_title="Cumulatief aantal voertuigen",
-                hovermode="x unified",
-                height=600
-            )
-            st.plotly_chart(fig2, use_container_width=True)
 
+                # Voorspellingen
+                if not forecast_yearly.empty:
+                    for col in forecast_yearly.columns:
+                        fig2.add_trace(go.Scatter(
+                            x=forecast_yearly.index,
+                            y=forecast_yearly[col],
+                            name=f"{col} – voorspelling",
+                            mode="lines",
+                            line=dict(dash="dash")
+                        ))
 
+                # Lay-out
+                fig2.update_layout(
+                    title=f"Cumulatief aantal voertuigen per brandstof (realistische voorspelling t/m {eindjaar})",
+                    xaxis_title="Jaar",
+                    yaxis_title="Cumulatief aantal voertuigen",
+                    hovermode="x unified",
+                    height=600
+                )
 
+                st.plotly_chart(fig2, use_container_width=True)
 
 
 
