@@ -643,6 +643,7 @@ if page == "⚡️ Laadpalen":
 
 
 
+
             folium.GeoJson(
                 gdf,
                 name="Provinciegrenzen",
