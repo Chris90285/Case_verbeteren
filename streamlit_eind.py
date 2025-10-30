@@ -721,6 +721,150 @@ if page == "⚡️ Laadpalen":
 
 
 
+        # --- Grafiek verdeling / kosten / verband ---
+        st.markdown("---")
+        st.markdown("## 📊 Verdeling & Verband tussen Laadpalen en Kosten")
+
+        if len(df_all) > 0:
+            def parse_cost(value):
+                if isinstance(value, str):
+                    if "free" in value.lower() or "gratis" in value.lower():
+                        return 0.0
+                    match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+                    return float(match.group(1)) if match else np.nan
+                return np.nan
+
+            df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+            df_all.loc[
+                (df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2),
+                "UsageCostClean"
+            ] = np.nan
+
+            if "PowerKW" in df_all.columns:
+                df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
+            elif "Connections.PowerKW" in df_all.columns:
+                df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections.PowerKW"], errors="coerce")
+            elif "Connections[0].PowerKW" in df_all.columns:
+                df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections[0].PowerKW"], errors="coerce")
+            else:
+                df_all["PowerKW_clean"] = np.nan
+
+            provincie_mapping = {
+                "Groningen": "Groningen",
+                "Friesland": "Friesland",
+                "Fryslân": "Friesland",
+                "Drenthe": "Drenthe",
+                "Overijssel": "Overijssel",
+                "Flevoland": "Flevoland",
+                "Gelderland": "Gelderland",
+                "Utrecht": "Utrecht",
+                "Noord-Holland": "Noord-Holland",
+                "North Holland": "Noord-Holland",
+                "Zuid-Holland": "Zuid-Holland",
+                "South Holland": "Zuid-Holland",
+                "Zeeland": "Zeeland",
+                "Noord-Brabant": "Noord-Brabant",
+                "North Brabant": "Noord-Brabant",
+                "Limburg": "Limburg"
+            }
+
+            df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
+            df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
+
+            df_agg = (
+                df_all.groupby("Provincie")
+                .agg(
+                    Aantal_palen=("ID", "count"),
+                    Gemiddelde_kosten=("UsageCostClean", "mean"),
+                )
+                .reset_index()
+            )
+
+            totaal = df_agg["Aantal_palen"].sum()
+            df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
+            df_agg = df_agg.sort_values("Percentage", ascending=False)
+
+            # Dropdown met extra optie
+            keuze = st.selectbox(
+                "📈 Kies welke verdeling of verband je wilt zien:",
+                ["Verdeling laadpalen per provincie (%)", "Gemiddelde kosten per provincie", "Verband tussen beschikbaarheid en kosten"]
+            )
+
+            if keuze == "Verdeling laadpalen per provincie (%)":
+                fig = px.bar(
+                    df_agg,
+                    x="Provincie",
+                    y="Percentage",
+                    title="Verdeling laadpalen per provincie (%)",
+                    text=df_agg["Percentage"].apply(lambda x: f"{x:.1f}%")
+                )
+                fig.update_traces(textposition="outside")
+                fig.update_layout(yaxis_title="Percentage van totaal (%)")
+
+            elif keuze == "Gemiddelde kosten per provincie":
+                fig = px.bar(
+                    df_agg,
+                    x="Provincie",
+                    y="Gemiddelde_kosten",
+                    title="Gemiddelde kosten per provincie (€ per kWh)"
+                )
+                fig.update_layout(yaxis_title="€ per kWh")
+
+            elif keuze == "Verband tussen beschikbaarheid en kosten":
+                fig = go.Figure()
+
+                # Balken = aandeel laadpalen
+                fig.add_trace(go.Bar(
+                    x=df_agg["Provincie"],
+                    y=df_agg["Percentage"],
+                    name="Aandeel laadpalen (%)",
+                    marker_color="rgb(0, 180, 255)",
+                    opacity=0.6,
+                    yaxis="y1"
+                ))
+
+                # Lijn = gemiddelde kosten
+                fig.add_trace(go.Scatter(
+                    x=df_agg["Provincie"],
+                    y=df_agg["Gemiddelde_kosten"],
+                    name="Gemiddelde kosten (€ per kWh)",
+                    mode="lines+markers",
+                    line=dict(color="rgb(255, 100, 100)", width=3),
+                    marker=dict(size=8, color="rgb(255, 150, 150)"),
+                    yaxis="y2"
+                ))
+
+                fig.update_layout(
+                    title="⚖️ Verband tussen beschikbaarheid en kosten per provincie",
+                    xaxis=dict(title="Provincie"),
+                    yaxis=dict(
+                        title="Aandeel laadpalen (%)",
+                        showgrid=False,
+                        color="rgb(0, 180, 255)"
+                    ),
+                    yaxis2=dict(
+                        title="Gemiddelde kosten (€ per kWh)",
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
+                        color="rgb(255, 150, 150)"
+                    ),
+                    legend=dict(orientation="h", y=1.15, x=0.25),
+                    template="plotly_dark",
+                    height=500
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Je ziet dat provincies met een groter aandeel laadpalen (blauwe balken) "
+                        "gemiddeld lagere laadtarieven hebben (rode lijn).")
+
+            fig.update_layout(xaxis_title="Provincie", showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+        else:
+            st.warning("Kon geen landelijke data laden voor de grafiek.")
+
+
 
 
 
